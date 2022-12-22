@@ -1,0 +1,8 @@
+name: photodember-code
+dependencies:
+  - python>=3.9
+  - numpy
+  - scipy>=1.9.3
+  - pip
+  - pip:
+    - -r requirements.txt

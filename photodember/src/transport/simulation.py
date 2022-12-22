@@ -2,6 +2,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from functools import reduce
 import numpy as np
+from scipy.integrate import solve_ivp
 from typing import List, Optional, Tuple
 
 from ..constants import PhysicalConstants
@@ -326,3 +327,14 @@ class Simulation:
             dy[E] += S[E]
             return dy
         return dydt
+
+
+def solve_pde(pde: OdeFunction, initial_state: SimulationState, times: ArrayLike, **solver_args) -> List[SimulationState]:
+    t = np.atleast_1d(times)
+    if len(t) < 2: raise ValueError(f"`times` must be a sequence of times with at least an initial and a final value.")
+    _solver_args = {"method": "LSODA", "t_eval": t}
+    _solver_args.update(solver_args)
+    y0 = np.copy(initial_state.array)
+    soln = solve_ivp(pde, [t[0], t[-1]], y0, **_solver_args)
+    states =  [SimulationState(soln.y[:,i], initial_state.grid_points, initial_state.number_particles) for i, _ in enumerate(t)]
+    return states

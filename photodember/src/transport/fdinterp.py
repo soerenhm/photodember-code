@@ -28,7 +28,7 @@ def cache_carrier_state_func(func: StateFunction):
         else:
             cache[0] = np.copy(T)
             cache[1] = np.copy(eta)
-            cache[2] = func(T, eta)
+            cache[2] = func(T, eta) # type: ignore
         return cache[2]
     return inner
 
@@ -43,7 +43,7 @@ class CubicLogInterp:
         T = table.temperature
         eta = table.reduced_chemical_potential
         qty = np.log(table.as_array2d(property))
-        return CubicLogInterp(RectBivariateSpline(T, eta, qty, kx=3, ky=3, s=0.0))
+        return CubicLogInterp(RectBivariateSpline(T, eta, qty, kx=3, ky=3, s=0))
 
     def eval(self, T: ArrayLike, eta: ArrayLike, dT=0, deta=0, grid=False) -> ArrayLike:
         log_value = self._spline(T, eta, dx=0, dy=0, grid=grid)
@@ -72,9 +72,9 @@ class CubicLogInterpFastDeriv:
     _spl_deta: RectBivariateSpline
 
     def __post_init__(self):
-        self.ev = cache_carrier_state_func(self.ev)
-        self.dT = cache_carrier_state_func(self.dT)
-        self.deta = cache_carrier_state_func(self.deta)
+        self.ev = cache_carrier_state_func(self.ev) # type: ignore
+        self.dT = cache_carrier_state_func(self.dT) # type: ignore
+        self.deta = cache_carrier_state_func(self.deta) # type: ignore
 
     @staticmethod
     def interpolate(table: FermiDiracTable, property: str) -> CubicLogInterpFastDeriv:

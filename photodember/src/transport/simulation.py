@@ -6,8 +6,6 @@ from typing import List, Optional, Tuple
 
 from ..constants import PhysicalConstants
 from .core import *
-# from photodember.src.constants import PhysicalConstants
-# from photodember.src.transport.core import *
 
 # -----------------------------------------------------------------------------
 # Types

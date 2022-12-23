@@ -278,3 +278,5 @@ meta_file = save_file.replace(".dat", ".json")
 if not pathlib.Path(meta_file).exists():
     with open(save_file.replace(".dat", ".json"), "w") as io:
         json.dump(conf.to_dict(), io)
+times = np.linspace(0.0, 1e-12, 1000)
+result = run_simulation(pde, save_file, initial_state, times)

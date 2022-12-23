@@ -62,7 +62,7 @@ class ParticleAttributes:
 
 @numba.njit
 def energy_current_density(u: ArrayF64, dx: float, e: float, T: ArrayF64, eF: ArrayF64, E: ArrayF64, L11: ArrayF64, L12: ArrayF64) -> ArrayF64:
-    """In-place calculation of the kinetic-energy density."""
+    """In-place calculation of the kinetic-energy current density."""
     u[0] = 0.
     for i in range(1, len(u)):
         T_dx = (T[i] - T[i-1])/dx
@@ -73,7 +73,7 @@ def energy_current_density(u: ArrayF64, dx: float, e: float, T: ArrayF64, eF: Ar
 
 @numba.njit
 def charge_current_density(J: ArrayF64, dx: float, e: float, T: ArrayF64, eF: ArrayF64, E: ArrayF64, L21: ArrayF64, L22: ArrayF64) -> ArrayF64:
-    """In-place calculation of the charge-current density."""    
+    """In-place calculation of the charge current density."""    
     J[0] = 0.
     for i in range(1, len(J)):
         T_dx = (T[i] - T[i-1])/dx

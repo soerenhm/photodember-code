@@ -5,43 +5,7 @@ import pathlib
 import json
 import numpy as np
 
-from photodember.simulations.dielectric import DielectricConfig
-from photodember.simulations.simulator import run_simulation
-# from photodember.src.constants import SI
-# from photodember.src.transport.simulation import *
-
-
-# -----------------------------------------------------------------------------
-# Test simulation....
-
-def main():
-    conf = DielectricConfig(
-        domain_size = 1e-6,
-        resolution = 2e-9,
-        initial_electron_hole_density = 1e18,
-        excitation_datafile = "photodember/data/Excitation sapphire 2.3 Jcm2.txt",
-        excitation_time_fwhm = 50e-15,
-        excitation_time_zero = 150e-15,
-        fdtable_conduction_band = "photodember/data/SiO2_CB.csv",
-        fdtable_valence_band = "photodember/data/SiO2_VB.csv",
-        carrier_phonon_thermalization_time = 1e-11,
-        electron_hole_thermalization_time = 1e-14,
-        electron_mobility = 3.5e-4,
-        hole_mobility = 5.8e-5,
-        phonon_temperature = 300.0,
-        relative_permittivity = 3.8
-    )
-    simul, initial_state = conf.create_simulation()
-    pde = simul.create_pde()
-
-    save_file = "photodember/simulations/fs1.dat"
-    meta_file = save_file.replace(".dat", ".json")
-    if not pathlib.Path(meta_file).exists():
-        with open(save_file.replace(".dat", ".json"), "w") as io:
-            json.dump(conf.to_dict(), io)
-    times = np.linspace(0.0, 1e-12, 1000)
-    result = run_simulation(pde, save_file, initial_state, times)
-    return result
+from photodember.simulations.simulator import run_simulation, DielectricConfig
 
 # %%
 
@@ -64,15 +28,15 @@ conf = DielectricConfig(
 simul, initial_state = conf.create_simulation()
 pde = simul.create_pde()
 
-# # %%
+# %%
 
-# save_file = "photodember/simulations/fs1_source_term_with_T_rise_2.dat"
-# meta_file = save_file.replace(".dat", ".json")
-# if not pathlib.Path(meta_file).exists():
-#     with open(save_file.replace(".dat", ".json"), "w") as io:
-#         json.dump(conf.to_dict(), io)
-# times = np.linspace(0.0, 1e-12, 1000)
-# result = run_simulation(pde, save_file, initial_state, times)
+save_file = "photodember/simulations/fs1_source_term_with_T_rise_4.dat"
+meta_file = save_file.replace(".dat", ".json")
+if not pathlib.Path(meta_file).exists():
+    with open(save_file.replace(".dat", ".json"), "w") as io:
+        json.dump(conf.to_dict(), io)
+times = np.linspace(0.0, 1e-12, 1000)
+result = run_simulation(pde, save_file, initial_state, times)
 
 
 # # %%

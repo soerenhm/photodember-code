@@ -3,7 +3,7 @@ import json
 import numpy as np
 from scipy.interpolate import CubicSpline
 
-from photodember.simulations.fused_silica import *
+from photodember.simulations.simulator import DielectricConfig, read_simulation_file
 
 # Pimp my plot
 # -----------------------------------------------------------------------------
@@ -23,7 +23,7 @@ plt.rcParams['animation.ffmpeg_path'] = "C:/ffmpeg/bin/ffmpeg.exe"
 # -----------------------------------------------------------------------------
 # %%
 
-simulfile = "photodember/simulations/fs1_source_term_with_T_rise_2.dat"
+simulfile = "photodember/simulations/fs1_source_term_with_T_rise.dat"
 metafile = simulfile.replace(".dat", ".json")
 
 with open(metafile, "r") as io:

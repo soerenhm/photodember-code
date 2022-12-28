@@ -6,14 +6,14 @@ from typing import List, Union
 from photodember.src.constants import SI
 
 
-## --------------------------------------------------------------------------------
-## Types and globals
+# -----------------------------------------------------------------------------
+# Types and globals
 
 ArrayF64 = NDArray[np.float64]
 
 
-## --------------------------------------------------------------------------------
-## Model definitions
+# ----------------------------------------------------------------------------
+# Model definitions
 
 @dataclass(frozen=True)
 class Lorentz:
@@ -85,8 +85,8 @@ class DrudeLorentz:
         return replace(model, lorentz=lorentz.shift_bandgap(lorentz, shift))
 
 
-## --------------------------------------------------------------------------------
-## Concrete models
+# -----------------------------------------------------------------------------
+# Concrete models
 
 sapphire = MultiLorentz(
     eps_inf=0.173,
@@ -103,8 +103,8 @@ sapphire = MultiLorentz(
 )
 
 
-## --------------------------------------------------------------------------------
-## Scripting
+# -----------------------------------------------------------------------------
+# Scripting
 
 def main() -> None:
     model = sapphire

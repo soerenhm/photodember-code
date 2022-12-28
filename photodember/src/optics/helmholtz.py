@@ -10,8 +10,8 @@ from typing import Callable, Union, List, Optional
 from photodember.src.constants import SI
 
 
-## --------------------------------------------------------------------------------
-## Types
+# -----------------------------------------------------------------------------
+# Types
 
 Number = Union[float, complex]
 ArrayF64 = NDArray[np.float64]
@@ -62,8 +62,8 @@ class UniaxialPermittivity:
 Permittivity = Union[IsotropicPermittivity, UniaxialPermittivity]
 
 
-## --------------------------------------------------------------------------------
-## Helpers
+# -----------------------------------------------------------------------------
+# Helpers
 
 c_0 = SI.c_0
 
@@ -80,8 +80,8 @@ def positive_imag(z: complex) -> complex:
     return z if z.imag >= 0. else -z
 
 
-## --------------------------------------------------------------------------------
-## API
+# -----------------------------------------------------------------------------
+# API
 
 @dataclass(frozen=True)
 class Layer:
@@ -145,8 +145,8 @@ class Stack:
         return self.layers[-1]
 
 
-## --------------------------------------------------------------------------------
-## Core
+# -----------------------------------------------------------------------------
+# Core
 
 @dataclass(frozen=True)
 class KVector:
@@ -373,8 +373,8 @@ def solve_stack(stack: Stack, om: float, th: float, pol: Polarization | str) -> 
     return StackSolution(stack=stack, ics=ics, kvec=kvec, pol=pol)
 
 
-## --------------------------------------------------------------------------------
-## Scripting
+# -----------------------------------------------------------------------------
+# Scripting
 
 def main(plt) -> None:
     layers = [

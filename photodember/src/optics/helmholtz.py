@@ -26,7 +26,9 @@ class Polarization(Enum):
 
 class InvalidPolarizationError(Exception):
     def __init__(self, arg):
-        message = f"Invalid polarization! Must be of type `Polarization`. Here: {type(arg)}."
+        message = (
+            f"Invalid polarization! Must be of type `Polarization`. Here: {type(arg)}."
+        )
         super().__init__(message)
 
 
@@ -38,7 +40,7 @@ class IsotropicPermittivity:
     @property
     def eps_o(self) -> PermittivityFunc:
         return self.eps
-    
+
     @property
     def eps_e(self) -> PermittivityFunc:
         return self.eps
@@ -59,6 +61,7 @@ class UniaxialPermittivity:
     deriv_o: PermittivityFunc
     deriv_e: PermittivityFunc
 
+
 Permittivity = Union[IsotropicPermittivity, UniaxialPermittivity]
 
 
@@ -77,11 +80,12 @@ def is_finite(x: float) -> bool:
 
 
 def positive_imag(z: complex) -> complex:
-    return z if z.imag >= 0. else -z
+    return z if z.imag >= 0.0 else -z
 
 
 # -----------------------------------------------------------------------------
 # API
+
 
 @dataclass(frozen=True)
 class Layer:
@@ -89,13 +93,32 @@ class Layer:
     perm: Permittivity
 
     @staticmethod
-    def create(thickness: float, eps_o: PermittivityFunc, eps_e: Optional[PermittivityFunc] = None, deriv_o: Optional[PermittivityFunc] = None, deriv_e: Optional[PermittivityFunc] = None) -> Layer:
-        _deriv_o = (lambda x: approx_deriv(eps_o, x, thickness*1e-6)) if deriv_o is None else deriv_o
+    def create(
+        thickness: float,
+        eps_o: PermittivityFunc,
+        eps_e: Optional[PermittivityFunc] = None,
+        deriv_o: Optional[PermittivityFunc] = None,
+        deriv_e: Optional[PermittivityFunc] = None,
+    ) -> Layer:
+        _deriv_o = (
+            (lambda x: approx_deriv(eps_o, x, thickness * 1e-6))
+            if deriv_o is None
+            else deriv_o
+        )
         if eps_e is None:
             return Layer(thickness, IsotropicPermittivity(eps_o, _deriv_o))
         else:
-            _deriv_e = (lambda x: approx_deriv(eps_e, x, thickness*1e-6)) if deriv_e is None else deriv_e
-            return Layer(thickness, UniaxialPermittivity(eps_o=eps_o, eps_e=eps_e, deriv_o=_deriv_o, deriv_e=_deriv_e))
+            _deriv_e = (
+                (lambda x: approx_deriv(eps_e, x, thickness * 1e-6))
+                if deriv_e is None
+                else deriv_e
+            )
+            return Layer(
+                thickness,
+                UniaxialPermittivity(
+                    eps_o=eps_o, eps_e=eps_e, deriv_o=_deriv_o, deriv_e=_deriv_e
+                ),
+            )
 
     @property
     def eps_o(self) -> PermittivityFunc:
@@ -123,13 +146,17 @@ class Stack:
         if len(layers) < 1:
             raise ValueError("Stack cannot be empty")
         if is_finite(layers[-1].thickness):
-            self.layers.append(Layer.create(math.inf, lambda _: 1.0 + 0j, deriv_o=lambda _: 0.0 + 0j))
+            self.layers.append(
+                Layer.create(math.inf, lambda _: 1.0 + 0j, deriv_o=lambda _: 0.0 + 0j)
+            )
         else:
             x = sum(layer.thickness for layer in self.layers[:-1])
             eps_o = self.layers[-1].eps_o(x)
             eps_e = self.layers[-1].eps_e(x)
             if max(eps_o.imag, eps_e.imag).imag > 1e-12:
-                raise ValueError(f"Imaginary part of epsilon at the rightmost boundary (at x = {x}) is {(eps_o.imag, eps_e.imag)}; it must be zero.")
+                raise ValueError(
+                    f"Imaginary part of epsilon at the rightmost boundary (at x = {x}) is {(eps_o.imag, eps_e.imag)}; it must be zero."
+                )
 
     @property
     def length(self) -> float:
@@ -148,6 +175,7 @@ class Stack:
 # -----------------------------------------------------------------------------
 # Core
 
+
 @dataclass(frozen=True)
 class KVector:
     k0: float
@@ -155,27 +183,46 @@ class KVector:
 
     @staticmethod
     def create(omega: float, theta: float) -> "KVector":
-        k0 = omega/c_0
+        k0 = omega / c_0
         kx = k0 * np.sin(np.deg2rad(theta))
         return KVector(k0=k0, kx=kx)
 
     def kz(self, eps_o: complex, eps_e: complex, pol: Polarization) -> complex:
         if pol is Polarization("p"):
-            return positive_imag(np.sqrt(eps_o*self.k0**2.0 - self.kx**2.0*(eps_o/eps_e) + 0j))
+            return positive_imag(
+                np.sqrt(eps_o * self.k0**2.0 - self.kx**2.0 * (eps_o / eps_e) + 0j)
+            )
         else:
-            return positive_imag(np.sqrt(eps_o*self.k0**2.0 - self.kx**2.0 + 0j))
+            return positive_imag(np.sqrt(eps_o * self.k0**2.0 - self.kx**2.0 + 0j))
 
 
-def de_dz(de: list[complex], z: float, e: list[complex], perm: Permittivity, k0: float, kx: float) -> list[complex]:
+def de_dz(
+    de: list[complex],
+    z: float,
+    e: list[complex],
+    perm: Permittivity,
+    k0: float,
+    kx: float,
+) -> list[complex]:
     de[0] = e[1]
-    de[1] = (kx**2.0 - perm.eps_o(z)*k0**2.0)*e[0]
+    de[1] = (kx**2.0 - perm.eps_o(z) * k0**2.0) * e[0]
     return de
 
 
-def db_dz(db: list[complex], z: float, b: list[complex], perm: Permittivity, k0: float, kx: float) -> list[complex]:
+def db_dz(
+    db: list[complex],
+    z: float,
+    b: list[complex],
+    perm: Permittivity,
+    k0: float,
+    kx: float,
+) -> list[complex]:
     epsz = perm.eps_o(z)
     db[0] = b[1]
-    db[1] = perm.deriv_o(z)/epsz*b[1] + ((epsz/perm.eps_e(z))*kx**2.0 - epsz*k0**2.0)*b[0]
+    db[1] = (
+        perm.deriv_o(z) / epsz * b[1]
+        + ((epsz / perm.eps_e(z)) * kx**2.0 - epsz * k0**2.0) * b[0]
+    )
     return db
 
 
@@ -185,7 +232,7 @@ def match_bc_s(e1, de1):
 
 def match_bc_p(eps2_o, eps1_o, b1, db1):
     b2 = b1
-    db2 = eps2_o/eps1_o * db1
+    db2 = eps2_o / eps1_o * db1
     return b2, db2
 
 
@@ -202,18 +249,18 @@ def refl_s(e, de, kz):
     if kz == 0:
         return 1.0 + 0j
     else:
-        er = e - de/(1j*kz)
-        ei = e + de/(1j*kz)
-        return er/ei
+        er = e - de / (1j * kz)
+        ei = e + de / (1j * kz)
+        return er / ei
 
 
 def refl_p(b, db, eps_o, kz):
     if kz == 0:
         return 1.0 + 0j
     else:
-        br = b - db/(1j*kz*eps_o)
-        bi = b + db/(1j*kz*eps_o)
-        return br/bi
+        br = b - db / (1j * kz * eps_o)
+        bi = b + db / (1j * kz * eps_o)
+        return br / bi
 
 
 def refl(f, df, eps_o, kz, pol: Polarization) -> complex:
@@ -229,14 +276,14 @@ def trans_s(e, de, kz):
     if kz == 0:
         return 0.0 + 0j
     else:
-        return 1.0/(.5*(e + de/(1j*kz)))
+        return 1.0 / (0.5 * (e + de / (1j * kz)))
 
 
 def trans_p(b, db, eps_o, kz):
     if kz == 0:
         return 0.0 + 0j
     else:
-        return 1.0/(.5*(b + db/(1j*kz*eps_o)))
+        return 1.0 / (0.5 * (b + db / (1j * kz * eps_o)))
 
 
 def trans(f, df, kz, eps_o, pol: Polarization) -> complex:
@@ -248,27 +295,39 @@ def trans(f, df, kz, eps_o, pol: Polarization) -> complex:
         raise InvalidPolarizationError(pol)
 
 
-def helmholtz_ode_func(eps: Permittivity, kx: float, k0: float, pol: Polarization) -> OdeFunction:
+def helmholtz_ode_func(
+    eps: Permittivity, kx: float, k0: float, pol: Polarization
+) -> OdeFunction:
     if pol == Polarization("s"):
         de = np.array([0.0 + 0j, 0.0 + 0j])
-        return lambda z, e: de_dz(de, z, e, eps, k0, kx) # type: ignore
+        return lambda z, e: de_dz(de, z, e, eps, k0, kx)  # type: ignore
     elif pol == Polarization("p"):
         db = np.array([0.0 + 0j, 0.0 + 0j])
-        return lambda z, b: db_dz(db, z, b, eps, k0, kx) # type: ignore
+        return lambda z, b: db_dz(db, z, b, eps, k0, kx)  # type: ignore
     else:
         raise InvalidPolarizationError(pol)
 
 
-def integrate_helmholtz(f0: list[complex], x: list[float] | ArrayF64, eps: Permittivity, k0: float, kx: float, pol: Polarization, ode_options: dict = {}) -> dict:
+def integrate_helmholtz(
+    f0: list[complex],
+    x: list[float] | ArrayF64,
+    eps: Permittivity,
+    k0: float,
+    kx: float,
+    pol: Polarization,
+    ode_options: dict = {},
+) -> dict:
     ode_func = helmholtz_ode_func(eps, kx, k0, pol)
     x1, x2 = x[0], x[-1]
-    out: dict = scipy.integrate.solve_ivp(ode_func, [x1, x2], f0, t_eval=x, **ode_options)
+    out: dict = scipy.integrate.solve_ivp(
+        ode_func, [x1, x2], f0, t_eval=x, **ode_options
+    )
     return out
 
 
-# A convenicence object. We calculate reflectivities and transmitivities 
+# A convenicence object. We calculate reflectivities and transmitivities
 # based on the value on the right side of a boundary. It also gives the initial conditions
-# for the Helmholtz equation, propagating a wave forward (which is more intuitive than the 
+# for the Helmholtz equation, propagating a wave forward (which is more intuitive than the
 # backward integration we use for solving the problem the first time).
 @dataclass(frozen=True)
 class HelmholtzInitialCondition:
@@ -323,9 +382,13 @@ class StackSolution:
         zf = self.stack.length
         kzf = self.kz(permf.eps_o(zf), permf.eps_e(zf))
         if self.pol == Polarization("p"):
-            return 0.0 if kzi == 0 else (t * t.conjugate()).real * np.real(kzf/kzi/permf.eps_o(zf))
+            return (
+                0.0
+                if kzi == 0
+                else (t * t.conjugate()).real * np.real(kzf / kzi / permf.eps_o(zf))
+            )
         else:
-            return 0.0 if kzi == 0 else (t * t.conjugate()).real * np.real(kzf/kzi)
+            return 0.0 if kzi == 0 else (t * t.conjugate()).real * np.real(kzf / kzi)
 
     def compute_field(self, layer_index: int, points: int):
         layer = self.layers[layer_index]
@@ -336,16 +399,20 @@ class StackSolution:
         return x, out["y"]
 
 
-def initial_condition(stack: Stack, kvec: KVector, pol: Polarization) -> HelmholtzInitialCondition:
+def initial_condition(
+    stack: Stack, kvec: KVector, pol: Polarization
+) -> HelmholtzInitialCondition:
     x = stack.length
     eps_o = stack.last.perm.eps_o(x)
     eps_e = stack.last.perm.eps_e(x)
-    f = 1. + 0j
-    df = 0. + 1j*kvec.kz(eps_o, eps_e, pol)
+    f = 1.0 + 0j
+    df = 0.0 + 1j * kvec.kz(eps_o, eps_e, pol)
     return HelmholtzInitialCondition(x=x, f=f, df=df, eps_o=eps_o)
 
 
-def solve_stack(stack: Stack, om: float, th: float, pol: Polarization | str) -> StackSolution:
+def solve_stack(
+    stack: Stack, om: float, th: float, pol: Polarization | str
+) -> StackSolution:
     """Solves the helmholtz equation for an incident wave from vacuum through a stack."""
     kvec = KVector.create(om, th)
     pol = Polarization(pol)
@@ -356,10 +423,20 @@ def solve_stack(stack: Stack, om: float, th: float, pol: Polarization | str) -> 
             layer = layers.pop(-1)
             x1 = initial.x
             x2 = x1 - layer.thickness
-            f1, df1 = match_bc(layer.perm.eps_o(x1), initial.eps_o, initial.f, initial.df, pol)
-            ode_options = {"max_step": min(layer.thickness/100, 0.1/kvec.k0)}
-            out = integrate_helmholtz([f1, df1], [x1, x2], layer.perm, kvec.k0, kvec.kx, pol, ode_options=ode_options)
-            f2, df2 = out["y"][:,-1]
+            f1, df1 = match_bc(
+                layer.perm.eps_o(x1), initial.eps_o, initial.f, initial.df, pol
+            )
+            ode_options = {"max_step": min(layer.thickness / 100, 0.1 / kvec.k0)}
+            out = integrate_helmholtz(
+                [f1, df1],
+                [x1, x2],
+                layer.perm,
+                kvec.k0,
+                kvec.kx,
+                pol,
+                ode_options=ode_options,
+            )
+            f2, df2 = out["y"][:, -1]
             value = HelmholtzInitialCondition(x2, f2, df2, layer.perm.eps_o(x2))
             return loop(acc + [value], layers)
         else:
@@ -367,8 +444,8 @@ def solve_stack(stack: Stack, om: float, th: float, pol: Polarization | str) -> 
             out.reverse()
             return out
 
-    layers = list(stack.layers) # careful! Make a copy, because we'll mutate the layers
-    layers.pop(-1)              # remove last layer (sets initial condition)
+    layers = list(stack.layers)  # careful! Make a copy, because we'll mutate the layers
+    layers.pop(-1)  # remove last layer (sets initial condition)
     ics = loop([initial_condition(stack, kvec, pol)], layers)
     return StackSolution(stack=stack, ics=ics, kvec=kvec, pol=pol)
 
@@ -376,10 +453,11 @@ def solve_stack(stack: Stack, om: float, th: float, pol: Polarization | str) -> 
 # -----------------------------------------------------------------------------
 # Scripting
 
+
 def main(plt) -> None:
     layers = [
         Layer.create(1e-5, lambda _: 1.5**2.0 + 0.01j),
-        Layer.create(math.inf, lambda _: 1.5**2.0 + 0.0j)
+        Layer.create(math.inf, lambda _: 1.5**2.0 + 0.0j),
     ]
     stack = Stack(layers)
     om = 2.35e15
@@ -392,7 +470,7 @@ def main(plt) -> None:
 
     x, y = sol.compute_field(0, 1_000)
     plt.figure()
-    plt.plot(x, y[0,:])
+    plt.plot(x, y[0, :])
     plt.show()
 
 

@@ -6,7 +6,6 @@ import pathlib
 import numpy as np
 import scipy as sp
 from scipy.special import erf
-
 from typing import List, Tuple
 from numpy.typing import NDArray
 
@@ -19,20 +18,30 @@ from photodember.src.transport.simulation import *
 # -----------------------------------------------------------------------------
 # Simulation functions
 
-def advance(pde: OdeFunction, init_state: SimulationState, ti: float, dt: float) -> SimulationState:
-    gc.collect() # sometimes memory consumption keeps rising, dunno why... this helps...
+
+def advance(
+    pde: OdeFunction, init_state: SimulationState, ti: float, dt: float
+) -> SimulationState:
+    gc.collect()  # sometimes memory consumption keeps rising, dunno why... this helps...
     return solve_pde(pde, init_state, [ti, ti + dt])[-1]
+
 
 def save_state_in(f, state: SimulationState, t: float):
     s = np.append([t], state.array).astype(np.float64).tobytes()
     f.write(s)
 
-def simulation_step(f, pde: OdeFunction, init_state: SimulationState, ti: float, tf: float):
-    new_state = advance(pde, init_state, ti, tf-ti)
+
+def simulation_step(
+    f, pde: OdeFunction, init_state: SimulationState, ti: float, tf: float
+):
+    new_state = advance(pde, init_state, ti, tf - ti)
     save_state_in(f, new_state, tf)
     return new_state
 
-def read_simulation_file(filename: str, initial_state: SimulationState) -> Tuple[List[float], List[SimulationState]]:
+
+def read_simulation_file(
+    filename: str, initial_state: SimulationState
+) -> Tuple[List[float], List[SimulationState]]:
     t = []
     states = []
     chunksize = len(initial_state.array) + 1
@@ -42,12 +51,17 @@ def read_simulation_file(filename: str, initial_state: SimulationState) -> Tuple
         while stop <= len(content):
             section = content[start:stop]
             t.append(section[0])
-            state = SimulationState(section[1:], initial_state.grid_points, initial_state.number_particles)
+            state = SimulationState(
+                section[1:], initial_state.grid_points, initial_state.number_particles
+            )
             states.append(state)
             start, stop = stop, stop + chunksize
     return t, states
 
-def run_simulation(pde: OdeFunction, save_file: str, init_state: SimulationState, times: ArrayLike):
+
+def run_simulation(
+    pde: OdeFunction, save_file: str, init_state: SimulationState, times: ArrayLike
+):
     times = np.atleast_1d(times)
     t = list(times)
     ti = t.pop(0)
@@ -55,12 +69,16 @@ def run_simulation(pde: OdeFunction, save_file: str, init_state: SimulationState
     if pathlib.Path(save_file).exists():
         read_t, read_states = read_simulation_file(save_file, init_state)
         if len(read_t) > 0:
-            if ti == read_t[0] and all(np.isclose(init_state.array, read_states[0].array)):
+            if ti == read_t[0] and all(
+                np.isclose(init_state.array, read_states[0].array)
+            ):
                 ti = read_t[-1]
                 init_state = read_states[-1]
                 t = list(filter(lambda t: t > ti, times))
             else:
-                raise ValueError("Simulation file already exists but saved states differ")
+                raise ValueError(
+                    "Simulation file already exists but saved states differ"
+                )
     else:
         with open(save_file, "wb") as f:
             save_state_in(f, init_state, ti)
@@ -78,7 +96,8 @@ def run_simulation(pde: OdeFunction, save_file: str, init_state: SimulationState
 
 
 # -----------------------------------------------------------------------------
-# Excitation data 
+# Excitation data
+
 
 @dataclass
 class ExcitationData:
@@ -86,28 +105,42 @@ class ExcitationData:
     number_density: NDArray
     energy_per_particle: NDArray
 
+
 def load_excitation_data(datafile: str) -> ExcitationData:
     data = np.loadtxt(datafile)
     position = data[:, 0] * 1e-6
     number_density = data[:, 1]
-    energy_per_particle = data[:,2] * SI.e
+    energy_per_particle = data[:, 2] * SI.e
     return ExcitationData(position, number_density, energy_per_particle)
 
-def to_simulation_grid(data: ExcitationData, grid_coordinates: NDArray) -> ExcitationData:
-    number_density = sp.interpolate.interp1d(data.position, data.number_density, kind="cubic")(grid_coordinates)
-    energy_per_particle = sp.interpolate.interp1d(data.position, data.energy_per_particle, kind="cubic")(grid_coordinates)
+
+def to_simulation_grid(
+    data: ExcitationData, grid_coordinates: NDArray
+) -> ExcitationData:
+    number_density = sp.interpolate.interp1d(
+        data.position, data.number_density, kind="cubic"
+    )(grid_coordinates)
+    energy_per_particle = sp.interpolate.interp1d(
+        data.position, data.energy_per_particle, kind="cubic"
+    )(grid_coordinates)
     return ExcitationData(grid_coordinates, number_density, energy_per_particle)
 
-def particle_temperatures(energy_per_particle: NDArray, particle_masses: List[float]) -> List[NDArray]:
+
+def particle_temperatures(
+    energy_per_particle: NDArray, particle_masses: List[float]
+) -> List[NDArray]:
     inverse_masses = np.divide(1.0, particle_masses)
-    temperature = energy_per_particle * (2/3) / SI.kB
+    temperature = energy_per_particle * (2 / 3) / SI.kB
+
     def particle_temperature(inverse_mass: float) -> NDArray:
         return temperature * (inverse_mass / np.sum(inverse_masses))
+
     return [particle_temperature(inv_mass) for inv_mass in inverse_masses]
 
 
 # -----------------------------------------------------------------------------
 # Particle data
+
 
 @dataclass
 class ParticleData:
@@ -117,9 +150,17 @@ class ParticleData:
 
     @property
     def mass(self) -> float:
-        return FermiDiracTable.load_meta(self.source.replace(".csv", ".json"))["relativeMass"] * SI.m_e
+        return (
+            FermiDiracTable.load_meta(self.source.replace(".csv", ".json"))[
+                "relativeMass"
+            ]
+            * SI.m_e
+        )
 
-def set_mobility(table: FermiDiracTable, meta: dict, new_value: float) -> Tuple[FermiDiracTable, dict]:
+
+def set_mobility(
+    table: FermiDiracTable, meta: dict, new_value: float
+) -> Tuple[FermiDiracTable, dict]:
     relaxtime = meta["relaxationTime"]
     old_value = SI.e * relaxtime / (meta["relativeMass"] * SI.m_e)
     scale = new_value / old_value
@@ -127,6 +168,7 @@ def set_mobility(table: FermiDiracTable, meta: dict, new_value: float) -> Tuple[
     new_meta = dict(meta)
     new_meta["relaxationTime"] = meta["relaxationTime"] * scale
     return new_table, new_meta
+
 
 def load_particle_attributes(data: ParticleData) -> ParticleAttributes:
     table = FermiDiracTable.load_data(data.source)
@@ -138,8 +180,16 @@ def load_particle_attributes(data: ParticleData) -> ParticleAttributes:
 # -----------------------------------------------------------------------------
 # Fused silica simulation
 
+
 def heat_capacity_from_state(attrs: ParticleAttributes, state: ParticleState):
-    return heat_capacity(np.zeros(state.grid_points), attrs.number_density, attrs.energy_density, state.temperature, state.red_chemical_potential)
+    return heat_capacity(
+        np.zeros(state.grid_points),
+        attrs.number_density,
+        attrs.energy_density,
+        state.temperature,
+        state.red_chemical_potential,
+    )
+
 
 # # Legacy source term... remove?
 # def create_source_term_legacy(N: int, particles: List[ParticleAttributes], final_density: NDArray, tfwhm: float, t0: float, geh: float, gph: float, Tph: float) -> OdeFunction:
@@ -170,7 +220,7 @@ def heat_capacity_from_state(attrs: ParticleAttributes, state: ParticleState):
 
 #         dUe_dNe = elec_attrs.energy_density.deta(Te, etae) / elec_attrs.number_density.deta(Te, etae) # type: ignore
 #         dUh_dNh = hole_attrs.energy_density.deta(Th, etah) / hole_attrs.number_density.deta(Th, etah) # type: ignore
-        
+
 #         # if t < t0 + 1.5*tfwhm:
 #         #     out[elec.energy_density] += G*dUe_dNe #- geh*(Te - Th) - gph*(Te - Tph)
 #         #     out[hole.energy_density] += G*dUh_dNh #- geh*(Th - Te) - gph*(Th - Tph)
@@ -181,7 +231,18 @@ def heat_capacity_from_state(attrs: ParticleAttributes, state: ParticleState):
 #         return out
 #     return S
 
-def create_source_term_T_rise(N: int, particles: List[ParticleAttributes], final_density: NDArray, final_temperatures: List[NDArray], tfwhm: float, t0: float, geh: float, gph: float, Tph: float) -> OdeFunction:
+
+def create_source_term_T_rise(
+    N: int,
+    particles: List[ParticleAttributes],
+    final_density: NDArray,
+    final_temperatures: List[NDArray],
+    tfwhm: float,
+    t0: float,
+    geh: float,
+    gph: float,
+    Tph: float,
+) -> OdeFunction:
     assert len(particles) == 2
     indexer = StateIndexer(N, 2)
     elec_attrs, hole_attrs = particles
@@ -189,23 +250,32 @@ def create_source_term_T_rise(N: int, particles: List[ParticleAttributes], final
     hole = indexer.particle(1)
     out = np.zeros(indexer.length)
     G, dTe, dTh, He, Hh = [np.zeros(N) for _ in range(5)]
-    
-    A = np.sqrt(4*np.log(2)/np.pi)/tfwhm
+
+    A = np.sqrt(4 * np.log(2) / np.pi) / tfwhm
+
     def G_(t):
-        G[:] = final_density * A * np.exp(-4*np.log(2)*((t-t0)/tfwhm)**2)
+        G[:] = final_density * A * np.exp(-4 * np.log(2) * ((t - t0) / tfwhm) ** 2)
         return G
 
     def dTeh(t):
-        dTe[:] = (final_temperatures[0] - Tph) * A * np.exp(-4*np.log(2)*((t-t0)/tfwhm)**2)
-        dTh[:] = (final_temperatures[1] - Tph) * A * np.exp(-4*np.log(2)*((t-t0)/tfwhm)**2)
+        dTe[:] = (
+            (final_temperatures[0] - Tph)
+            * A
+            * np.exp(-4 * np.log(2) * ((t - t0) / tfwhm) ** 2)
+        )
+        dTh[:] = (
+            (final_temperatures[1] - Tph)
+            * A
+            * np.exp(-4 * np.log(2) * ((t - t0) / tfwhm) ** 2)
+        )
         return dTe, dTh
 
     def rise(t):
-        return .5*(1 + erf(np.sqrt(4*np.log(2))*(t-t0)/tfwhm))
+        return 0.5 * (1 + erf(np.sqrt(4 * np.log(2)) * (t - t0) / tfwhm))
 
     def S(t, y):
         out.fill(0.0)
-        
+
         G = G_(t)
         dTe, dTh = dTeh(t)
         out[elec.number_density] += G
@@ -214,17 +284,22 @@ def create_source_term_T_rise(N: int, particles: List[ParticleAttributes], final
         # Electron
         Te, etae = y[elec.temperature], y[elec.red_chemical_potential]
         Ue, Ne = elec_attrs.energy_density, elec_attrs.number_density
-        He[:] = (Ue.dT(Te, etae) - Ue.deta(Te, etae)*Ne.dT(Te, etae)/Ne.deta(Te, etae)) * dTe + Ue.deta(Te, etae)/Ne.deta(Te, etae) * G
+        He[:] = (
+            Ue.dT(Te, etae) - Ue.deta(Te, etae) * Ne.dT(Te, etae) / Ne.deta(Te, etae)
+        ) * dTe + Ue.deta(Te, etae) / Ne.deta(Te, etae) * G
 
         # Hole
         Th, etah = y[hole.temperature], y[hole.red_chemical_potential]
         Uh, Nh = hole_attrs.energy_density, hole_attrs.number_density
-        Hh[:] = (Uh.dT(Th, etah) - Uh.deta(Th, etah)*Nh.dT(Th, etah)/Nh.deta(Th, etah)) * dTh + Uh.deta(Th, etah)/Nh.deta(Th, etah) * G
+        Hh[:] = (
+            Uh.dT(Th, etah) - Uh.deta(Th, etah) * Nh.dT(Th, etah) / Nh.deta(Th, etah)
+        ) * dTh + Uh.deta(Th, etah) / Nh.deta(Th, etah) * G
 
         r = rise(t)
-        out[elec.energy_density] += He - r*(geh*(Te - Th) + gph*(Te - Tph))
-        out[hole.energy_density] += Hh - r*(geh*(Th - Te) + gph*(Th - Tph))
+        out[elec.energy_density] += He - r * (geh * (Te - Th) + gph * (Te - Tph))
+        out[hole.energy_density] += Hh - r * (geh * (Th - Te) + gph * (Th - Tph))
         return out
+
     return S
 
 
@@ -263,12 +338,16 @@ class DielectricConfig:
 
     @cached_property
     def particle_attributes(self):
-        return [load_particle_attributes(self.electron_data),
-                load_particle_attributes(self.hole_data)]
-    
+        return [
+            load_particle_attributes(self.electron_data),
+            load_particle_attributes(self.hole_data),
+        ]
+
     @cached_property
     def excitation_data(self) -> ExcitationData:
-        return to_simulation_grid(load_excitation_data(self.excitation_datafile), self.grid)
+        return to_simulation_grid(
+            load_excitation_data(self.excitation_datafile), self.grid
+        )
 
     @property
     def particle_masses(self) -> List[float]:
@@ -282,17 +361,28 @@ class DielectricConfig:
 
     @property
     def excitation_temperatures(self) -> List[NDArray]:
-        return particle_temperatures(self.excitation_data.energy_per_particle, self.particle_masses)
+        return particle_temperatures(
+            self.excitation_data.energy_per_particle, self.particle_masses
+        )
 
     @property
     def initial_state(self) -> SimulationState:
-        electron_hole_density = self.initial_electron_hole_density * np.ones_like(self.grid)
+        electron_hole_density = self.initial_electron_hole_density * np.ones_like(
+            self.grid
+        )
         temperatures = self.initial_temperatures
         particle_attrs = self.particle_attributes
         return SimulationState.create(
-                   [ParticleState.create(electron_hole_density, temperatures[0], particle_attrs[0]),
-                    ParticleState.create(electron_hole_density, temperatures[1], particle_attrs[1])],
-                    np.zeros_like(self.grid))
+            [
+                ParticleState.create(
+                    electron_hole_density, temperatures[0], particle_attrs[0]
+                ),
+                ParticleState.create(
+                    electron_hole_density, temperatures[1], particle_attrs[1]
+                ),
+            ],
+            np.zeros_like(self.grid),
+        )
 
     def create_simulation(self) -> Tuple[Simulation, SimulationState]:
         x = self.grid
@@ -303,23 +393,56 @@ class DielectricConfig:
         excitation_data = self.excitation_data
         electron_hole_density = self.initial_electron_hole_density * np.ones_like(x)
         final_temperatures = self.excitation_temperatures
-        excited_final_state = [ # state immediately after excitation in the absence of transport (i.e. max density)
-            ParticleState.create(excitation_data.number_density, final_temperatures[0], particle_attrs[0]),
-            ParticleState.create(excitation_data.number_density, final_temperatures[1], particle_attrs[1])
+        excited_final_state = [  # state immediately after excitation in the absence of transport (i.e. max density)
+            ParticleState.create(
+                excitation_data.number_density, final_temperatures[0], particle_attrs[0]
+            ),
+            ParticleState.create(
+                excitation_data.number_density, final_temperatures[1], particle_attrs[1]
+            ),
         ]
 
-        Ceh = np.array([heat_capacity_from_state(attrs, state) for (attrs, state) in zip(particle_attrs, excited_final_state)]).sum(axis=0)
+        Ceh = np.array(
+            [
+                heat_capacity_from_state(attrs, state)
+                for (attrs, state) in zip(particle_attrs, excited_final_state)
+            ]
+        ).sum(axis=0)
         geh = np.average(Ceh) / self.electron_hole_thermalization_time
         gph = np.average(Ceh) / self.carrier_phonon_thermalization_time
-        
-        source_fn = create_source_term_T_rise(N, particle_attrs, excitation_data.number_density, [final_temperatures[0], final_temperatures[1]], self.excitation_time_fwhm, self.excitation_time_zero, geh, gph, self.phonon_temperature)
-        simul = Simulation(N, self.resolution, SI, self.relative_permittivity, particle_attrs, source_fn)
+
+        source_fn = create_source_term_T_rise(
+            N,
+            particle_attrs,
+            excitation_data.number_density,
+            [final_temperatures[0], final_temperatures[1]],
+            self.excitation_time_fwhm,
+            self.excitation_time_zero,
+            geh,
+            gph,
+            self.phonon_temperature,
+        )
+        simul = Simulation(
+            N,
+            self.resolution,
+            SI,
+            self.relative_permittivity,
+            particle_attrs,
+            source_fn,
+        )
         initial_electric_field = np.zeros_like(x)
         initial_temperatures = self.initial_temperatures
         initial_state = SimulationState.create(
-                   [ParticleState.create(electron_hole_density, initial_temperatures[0], particle_attrs[0]),
-                    ParticleState.create(electron_hole_density, initial_temperatures[1], particle_attrs[1])],
-                    initial_electric_field)
+            [
+                ParticleState.create(
+                    electron_hole_density, initial_temperatures[0], particle_attrs[0]
+                ),
+                ParticleState.create(
+                    electron_hole_density, initial_temperatures[1], particle_attrs[1]
+                ),
+            ],
+            initial_electric_field,
+        )
         return simul, initial_state
 
     def to_dict(self) -> dict:

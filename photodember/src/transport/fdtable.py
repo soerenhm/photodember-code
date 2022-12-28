@@ -33,12 +33,11 @@ class FermiDiracTable:
     @staticmethod
     def load_data(csvfile: str) -> FermiDiracTable:
         schema = DataSchema
-        df = pd.read_csv(csvfile, delimiter='\t')
+        df = pd.read_csv(csvfile, delimiter="\t")
         columns = df.columns
-        df = (
-            df.set_axis([col.split(" [")[0] for col in columns], axis="columns")
-            .sort_values([schema.TEMPERATURE, schema.REDUCED_CHEMICAL_POTENTIAL])
-        )
+        df = df.set_axis(
+            [col.split(" [")[0] for col in columns], axis="columns"
+        ).sort_values([schema.TEMPERATURE, schema.REDUCED_CHEMICAL_POTENTIAL])
         return FermiDiracTable(df, str(pathlib.Path(csvfile).absolute()))
 
     @staticmethod

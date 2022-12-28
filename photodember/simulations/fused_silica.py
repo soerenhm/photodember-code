@@ -1,4 +1,4 @@
-# %% 
+# %%
 
 from __future__ import annotations
 import pathlib
@@ -10,20 +10,20 @@ from photodember.simulations.simulator import run_simulation, DielectricConfig
 # %%
 
 conf = DielectricConfig(
-    domain_size = 1e-6,
-    resolution = 2e-9,
-    initial_electron_hole_density = 1e18,
-    excitation_datafile = "photodember/data/Excitation sapphire 2.3 Jcm2.txt",
-    excitation_time_fwhm = 50e-15,
-    excitation_time_zero = 150e-15,
-    fdtable_conduction_band = "photodember/data/SiO2_CB.csv",
-    fdtable_valence_band = "photodember/data/SiO2_VB.csv",
-    carrier_phonon_thermalization_time = 1e-11,
-    electron_hole_thermalization_time = 1e-14,
-    electron_mobility = 3.5e-4,
-    hole_mobility = 5.8e-5,
-    phonon_temperature = 300.0,
-    relative_permittivity = 3.8
+    domain_size=1e-6,
+    resolution=2e-9,
+    initial_electron_hole_density=1e18,
+    excitation_datafile="photodember/data/Excitation sapphire 2.3 Jcm2.txt",
+    excitation_time_fwhm=50e-15,
+    excitation_time_zero=150e-15,
+    fdtable_conduction_band="photodember/data/SiO2_CB.csv",
+    fdtable_valence_band="photodember/data/SiO2_VB.csv",
+    carrier_phonon_thermalization_time=1e-11,
+    electron_hole_thermalization_time=1e-14,
+    electron_mobility=3.5e-4,
+    hole_mobility=5.8e-5,
+    phonon_temperature=300.0,
+    relative_permittivity=3.8,
 )
 simul, initial_state = conf.create_simulation()
 pde = simul.create_pde()

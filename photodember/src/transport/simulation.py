@@ -328,6 +328,22 @@ class Simulation:
             return dy
         return dydt
 
+    def charge_current_density(self, state: SimulationState) -> List[ArrayF64]:
+        dx = self.resolution
+        def J(E, particle: ParticleAttributes, state: ParticleState) -> ArrayF64:
+            T, eta = state.temperature, state.chemical_potential(self.const.e, self.const.kB)
+            eF = fermi_energy(np.zeros(self.grid_points), eta, T, self.const.kB, particle.electric_charge)
+            return charge_current_density(np.zeros(self.grid_points), dx, self.const.e, T, eF, E, particle.L21(T, eta), particle.L22(T, eta)) # type: ignore
+        return [J(state.electric_field, p, st) for p, st in zip(self.particles, state.particles)]
+
+    def energy_current_density(self, state: SimulationState) -> List[ArrayF64]:
+        dx = self.resolution
+        def u(E, particle: ParticleAttributes, state: ParticleState) -> ArrayF64:
+            T, eta = state.temperature, state.chemical_potential(self.const.e, self.const.kB)
+            eF = fermi_energy(np.zeros(self.grid_points), eta, T, self.const.kB, particle.electric_charge)
+            return energy_current_density(np.zeros(self.grid_points), dx, self.const.e, T, eF, E, particle.L11(T, eta), particle.L12(T, eta)) # type: ignore
+        return [u(state.electric_field, p, st) for p, st in zip(self.particles, state.particles)]
+
 
 def solve_pde(pde: OdeFunction, initial_state: SimulationState, times: ArrayLike, **solver_args) -> List[SimulationState]:
     t = np.atleast_1d(times)

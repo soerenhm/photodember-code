@@ -253,13 +253,12 @@ class Simulation:
         e, kB, eps_0 = self.const.e, self.const.kB, self.const.eps_0
         npts, dx = self.grid_points, self.resolution
 
-        state_indexer = StateIndexer(npts, len(particles))
-        property_indexer = PropertyIndexer(npts, 0)
+        indexer = StateIndexer(npts, len(particles))
 
         # Pre-allocate arrays
-        dy = np.zeros(state_indexer.length)
+        dy = np.zeros(indexer.length)
         S = np.zeros_like(dy)
-        Lij = np.zeros_like(dy)
+        L11, L12, L21, L22 = [np.zeros(npts) for _ in range(4)]
         eF, J, u, dN, dU, dT, deta = [np.zeros(npts) for _ in range(7)]
         jac = np.zeros((npts, 2, 2))
 
@@ -274,55 +273,46 @@ class Simulation:
             jac = jacobian_from_densities(jac, particle.number_density, particle.energy_density, T, eta)
             return transform_density_differentials(dT, deta, jac, dN, dU)
 
-        def dydt(t, y_: ArrayF64):
-            nonlocal dN, dU, J, u, eF, Lij  # nonlocal for arrays may not be needed?
-            eta = property_indexer.red_chemical_potential
-            T = property_indexer.temperature
-            N = property_indexer.number_density
-            U = property_indexer.energy_density
-            E = state_indexer.electric_field
-            L11 = property_indexer.L11
-            L12 = property_indexer.L12
-            L21 = property_indexer.L21
-            L22 = property_indexer.L22
+        def dydt(t, y: ArrayF64):
+            nonlocal dN, dU, J, u, eF # nonlocal for arrays may not be needed?
             dy.fill(0.0)
+            E = indexer.electric_field
 
-            efield = y_[E]
-            S = source_fn(t, y_)
+            efield = y[E]
+            S = source_fn(t, y)
 
             # Replace with property indexer?
-            for particle, inds in zip(particles, state_indexer.particles):
-                view = inds.view
-                y = y_[view]
-                L = Lij[view]
-                # Calculate new kinetic coefficients
-                L[L11] = particle.L11(y[T], y[eta])
-                L[L12] = particle.L12(y[T], y[eta])
-                L[L21] = particle.L21(y[T], y[eta])
-                L[L22] = particle.L22(y[T], y[eta])
+            for particle, inds in zip(particles, indexer.particles):
+                eta = inds.red_chemical_potential
+                T = inds.temperature
+                N = inds.number_density
+                U = inds.energy_density
 
-                y = y_[view]
-                eF = fermi_energy(eF, y[eta], y[T], kB, particle.electric_charge)
+                # Calculate kinetic coefficients
+                L11[:] = particle.L11(y[T], y[eta])
+                L12[:] = particle.L12(y[T], y[eta])
+                L21[:] = particle.L21(y[T], y[eta])
+                L22[:] = particle.L22(y[T], y[eta])
 
                 # Currents
-                u = energy_current_density(u, dx, e, y[T], eF, efield, Lij[view][L11], Lij[view][L12])
-                J = charge_current_density(J, dx, e, y[T], eF, efield, Lij[view][L21], Lij[view][L22])
+                eF = fermi_energy(eF, y[eta], y[T], kB, particle.electric_charge)
+                u = energy_current_density(u, dx, e, y[T], eF, efield, L11, L12)
+                J = charge_current_density(J, dx, e, y[T], eF, efield, L21, L22)
 
                 # Differentials
                 dN = number_density_differntial(dN, 1.0, dx, particle.electric_charge, J)
                 dU = energy_density_differential(dU, 1.0, dx, u, J, efield)
-                dN[:] += S[view][N]
-                dU[:] += S[view][U]
+                dN[:] += S[N]
+                dU[:] += S[U]
                 dT, deta = compute_dT_deta(particle, y[T], y[eta], dN, dU)
-                dT[:] += S[view][T]
-                deta[:] += S[view][eta]
+                dT[:] += S[T]
+                deta[:] += S[eta]
 
                 # update dydt
-                dy_ = dy[view]
-                dy_[N] = dN
-                dy_[U] = dU
-                dy_[T] = dT
-                dy_[eta] = deta
+                dy[N] = dN
+                dy[U] = dU
+                dy[T] = dT
+                dy[eta] = deta
                 dy[E] += -J/eps_0/self.eps_rel
             dy[E] += S[E]
             return dy

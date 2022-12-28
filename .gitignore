@@ -4,3 +4,4 @@
 *.csv
 photodember/data/*.txt
 *.dat
+*.png

@@ -132,7 +132,7 @@ function scan_fermi_integrals(params::ScanParams, θ, η, rtol=1e-12)
         return value
     end
     output = zeros(length(args), length(columns))
-    Threads.@threads for i in eachindex(args)
+    for i in eachindex(args)
         arg = args[i]
         if i % 1000 == 0 
             println("Progress: $(i/length(args))")
@@ -273,7 +273,7 @@ module FusedSilica
 
     function run_scan()
         bandgap_eV = 8.9
-        non_parabolicity = 0.0
+        non_parabolicity = 0.4 / e # 1/J
         relmass_cb = 0.5
         relmass_vb = 3.0
         mobility_cb = 0.1 # m^2/V s
@@ -286,25 +286,26 @@ module FusedSilica
         eFmin = -0.6*bandgap_eV
         eFmax = 1.0*bandgap_eV
 
-        params_cb = Main.ScanParams(relmass_cb, non_parabolicity, relax_time_cb, kBT0)
-        params_vb = Main.ScanParams(relmass_vb, non_parabolicity, relax_time_vb, kBT0)
+        α = non_parabolicity * kBT0 # dimensionless non-parabolicity
+        params_cb = Main.ScanParams(relmass_cb, α, relax_time_cb, kBT0)
+        params_vb = Main.ScanParams(relmass_vb, α, relax_time_vb, kBT0)
         T = range(1/Tmax, 1/Tmin, npoints) .|> inv |> reverse
         θ = kB * T ./ kBT0
         η = range(e*eFmin/(kB*Tmin), e*eFmax/(kB*Tmin), npoints)
-        save_scan("data/SiO2_paper_CB.csv", params_cb, scan_fermi_integrals(params_cb, θ, η))
-        save_scan("data/SiO2_paper_VB.csv", params_vb, scan_fermi_integrals(params_vb, θ, η))
+        save_scan("photodember/data/SiO2_alpha-0.4_CB.csv", params_cb, scan_fermi_integrals(params_cb, θ, η))
+        save_scan("photodember/data/SiO2_alpha-0.4_VB.csv", params_vb, scan_fermi_integrals(params_vb, θ, η))
     end
 
     function run_scan_linear_T()
         bandgap_eV = 8.9
-        non_parabolicity = 0.0
+        non_parabolicity = 0.4
         relmass_cb = 0.5
         relmass_vb = 3.0
         mobility_cb = 0.1 # m^2/V s
         relax_time_cb = mobility_cb * (relmass_cb * me) / e
         relax_time_vb = relax_time_cb
 
-        npoints = 1000
+        npoints = 400
         Tmin = 200.0
         Tmax = 30_000.0
         eFmin = -0.6*bandgap_eV

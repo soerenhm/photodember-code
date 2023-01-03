@@ -412,10 +412,11 @@ def initial_condition(
 
 def solve_stack(
     stack: Stack, om: float, th: float, pol: Polarization | str
-) -> StackSolution:
+, ode_options: dict = {}) -> StackSolution:
     """Solves the helmholtz equation for an incident wave from vacuum through a stack."""
     kvec = KVector.create(om, th)
     pol = Polarization(pol)
+    ode_options = dict(ode_options) # make a copy
 
     def loop(acc, layers):
         if len(layers) > 0:
@@ -426,7 +427,8 @@ def solve_stack(
             f1, df1 = match_bc(
                 layer.perm.eps_o(x1), initial.eps_o, initial.f, initial.df, pol
             )
-            ode_options = {"max_step": min(layer.thickness / 100, 0.1 / kvec.k0)}
+            ode_options_ = {"max_step": min(layer.thickness / 100, 0.1 / kvec.k0)}
+            ode_options_.update(ode_options)
             out = integrate_helmholtz(
                 [f1, df1],
                 [x1, x2],
@@ -434,7 +436,7 @@ def solve_stack(
                 kvec.k0,
                 kvec.kx,
                 pol,
-                ode_options=ode_options,
+                ode_options=ode_options_,
             )
             f2, df2 = out["y"][:, -1]
             value = HelmholtzInitialCondition(x2, f2, df2, layer.perm.eps_o(x2))
@@ -463,7 +465,7 @@ def main(plt) -> None:
     om = 2.35e15
     th = 0.0
     pol = Polarization("p")
-    sol = solve_stack(stack, om, th, pol)
+    sol = solve_stack(stack, om, th, pol, ode_options=dict(method="RK45"))
     print(f"R = {sol.R}")
     print(f"T = {sol.T}")
     print(f"R + T = {sol.R + sol.T}")

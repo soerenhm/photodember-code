@@ -295,38 +295,10 @@ module FusedSilica
         save_scan("photodember/data/SiO2_alpha-2.0_CB.csv", params_cb, scan_fermi_integrals(params_cb, θ, η))
         save_scan("photodember/data/SiO2_alpha-2.0_VB.csv", params_vb, scan_fermi_integrals(params_vb, θ, η))
     end
-
-    function run_scan_linear_T()
-        bandgap_eV = 8.9
-        non_parabolicity = 0.4
-        relmass_cb = 0.5
-        relmass_vb = 3.0
-        mobility_cb = 0.1 # m^2/V s
-        relax_time_cb = mobility_cb * (relmass_cb * me) / e
-        relax_time_vb = relax_time_cb
-
-        npoints = 400
-        Tmin = 200.0
-        Tmax = 30_000.0
-        eFmin = -0.6*bandgap_eV
-        eFmax = 1.0*bandgap_eV
-
-        params_cb = Main.ScanParams(relmass_cb, non_parabolicity, relax_time_cb, kBT0)
-        params_vb = Main.ScanParams(relmass_vb, non_parabolicity, relax_time_vb, kBT0)
-        T = range(Tmin, Tmax, npoints)
-        θ = kB * T ./ kBT0
-        η = range(e*eFmin/(kB*Tmin), e*eFmax/(kB*Tmin), npoints)
-        save_scan("data/SiO2_reg_T_CB.csv", params_cb, scan_fermi_integrals(params_cb, θ, η))
-        save_scan("data/SiO2_reg_T_VB.csv", params_vb, scan_fermi_integrals(params_vb, θ, η))
-    end
 end
 
+# Tabulate FD integrals for Fused Silica
 @time FusedSilica.run_scan()
-# FusedSilica.run_scan_linear_T()
 
-# f = x -> Integrand.kinetic_integral_2(0.0, 1.0, 100.0, x)
-# g = transform_integrand(f)
-# t = range(0, 1, 1000)
-# plt.plot(t, g.(t))
+# Check the non-degenerate case 
 # Tests.run_tests(100.0)
-# FusedSilica.run_scan()

@@ -4,22 +4,123 @@ from functools import partial, cached_property
 import gc
 import pathlib
 import itertools
+import json
 from typing import Any, Callable, Dict, List, Sequence, Tuple
 
 import numpy as np
 import scipy as sp
-
-from scipy.special import erf
 from numpy.typing import NDArray
+from scipy.interpolate import interp1d
+from scipy.optimize import minimize
+from scipy.special import erf
 
 from photodember.src.constants import SI
 from photodember.src.transport.fdtable import FermiDiracTable
 from photodember.src.transport.fdinterp import interpolate_particle_attributes
 from photodember.src.transport.core import ParticleAttributes
 from photodember.src.transport.simulation import *
-
-from photodember.src.constants import SI
 from photodember.src.optics.helmholtz import Layer, Stack, solve_stack
+
+
+# Utils
+# -----------------------------------------------------------------------------
+
+
+def select(inds, seq):
+    """Select indices from a sequence."""
+    for i in inds:
+        yield seq[i]
+
+
+def unzip(seq):
+    return zip(*seq)
+
+
+def dictproduct(d: Dict[str, Any]):
+    """Sequence of dictionaries containing all possible combination of values."""
+
+    def split_dict(pair: Tuple[str, Any]):
+        k, values = pair
+        try:
+            return itertools.product([k], values)
+        except TypeError:
+            return itertools.product([k], [values])
+
+    return map(dict, itertools.product(*map(split_dict, d.items())))
+
+
+def chunked(n: int, iterable):
+    """Takes in iterable and divides it into chunks of size `n`."""
+    iterator = iter(iterable)
+    seq = (list(itertools.islice(iterator, n)) for _ in itertools.repeat(None))
+    return itertools.takewhile(bool, seq)
+
+
+def convolve(td, yd, f, t):
+    """Convolution between data `(td, yd)` and `f` evaluated at `t`."""
+    g = f(t)
+    g = g / np.sum(g)
+    T = td[-1] - td[0]
+    idx = np.logical_and(t >= td[0] - T / 4, t <= td[-1] + T / 4)
+    z = np.convolve(g, np.interp(t[idx], td, yd))[: len(t)]
+    return t - T / 4, z
+
+
+def exp_decay(fv, p, x):
+    return fv + p[0] * np.exp(-x / p[1])
+
+
+def fit_exp_decay(fv, x, y, p0=[-1.0, 1e-6]):
+    def f(p):
+        return exp_decay(fv, p, x)
+
+    def ll(p):
+        return np.sum((y - f(p)) ** 2)
+
+    return minimize(ll, p0, method="Nelder-Mead", tol=1e-12)
+
+
+def right_extrapolate_with_exp_decay(func, final_value, x, p0):
+    opt = fit_exp_decay(final_value, x, func(x), p0=p0)
+    xmax = min(x)
+
+    if not opt.success:
+        if p0[1] > 1e4:
+            raise ValueError("Could not fit data")
+        else:
+            return right_extrapolate_with_exp_decay(
+                func, final_value, x, [p0[0], p0[1] * 1e3]
+            )
+        # print("Could not fit data. Perhaps because it's a constant function?")
+    p = opt.x
+
+    def f(t):
+        if np.ndim(t) == 0:
+            if t < xmax:
+                return func(t)
+            else:
+                return exp_decay(final_value, p, t)
+        else:
+            t = np.asarray(t)
+            y = np.zeros_like(t)
+            I = t < xmax
+            y[I] = func(t[I])
+            y[~I] = exp_decay(final_value, p, t[~I])
+            return y
+
+    return f
+
+
+def electric_field_to_grid(efield: ArrayF64) -> ArrayF64:
+    """Electric field evaluated on grid points.
+
+    In the transport simulations, the electric field is saved halfway between
+    grid points. This function maps that electric field onto the grid points."""
+    res = np.zeros_like(efield)
+    res[0] = 0.5 * efield[1]
+    res[1:-1] = 0.5 * (efield[1:-1] + efield[2:])
+    res[-1] = 0.5 * efield[-1]
+    return res
 
 
 # -----------------------------------------------------------------------------
@@ -458,3 +559,277 @@ class SimulationConfig:
     @staticmethod
     def from_dict(config: dict) -> SimulationConfig:
         return SimulationConfig(**config)
+
+
+# Band structure
+# -----------------------------------------------------------------------------
+# %%
+
+
+def energy_vs_k(alpha, m, kx, ky, kz):
+    k = np.sqrt(kx**2 + ky**2 + kz**2)
+    q = SI.hbar * k / np.sqrt(m)
+    return (-1 + np.sqrt(1 + 2 * alpha * q**2)) / (2 * alpha)
+
+
+def effective_mass(m, alpha, kx):
+    q = SI.hbar * kx / np.sqrt(m)
+    return m * (1 + 2 * alpha * q**2) ** (3 / 2)
+
+
+def effective_mass_perp(m, alpha, kx):
+    q = SI.hbar * kx / np.sqrt(m)
+    return m * (1 + 2 * alpha * q**2) ** 0.5
+
+
+def integrated_wavevector(E, t, tau_eph: float, samples: int = 2000):
+    # Transform to uniform simulation times
+    t_conv, dt_conv = np.linspace(t[0], t[-1], samples, retstep=True)
+    conv = np.exp(-t_conv / tau_eph) * dt_conv
+    E_int = np.array(
+        [
+            np.convolve(conv, np.interp(t_conv, t, E[:, i]))[: len(t_conv)]
+            for i in range(0, E.shape[1])
+        ]
+    )
+    # Transform back to the (generally) non-uniform simulation times
+    E_int = np.array([np.interp(t, t_conv, E_int[i, :]) for i in range(E_int.shape[0])])
+    return SI.e * E_int / SI.hbar
+
+
+# Helmholtz solver
+# -----------------------------------------------------------------------------
+
+
+def create_eps_from(eps_v, n_val, om, density, mass, gam):
+    def eps(x):
+        nx = density(x)
+        om_p = np.sqrt(SI.e**2 * nx / (SI.eps_0 * mass(x)))
+        return (
+            eps_v - (eps_v - 1) * (nx / n_val) - om_p**2 / (om * (om + 1j * gam(x)))
+        )
+
+    return eps
+
+
+def create_stack(L, eps_v, eps_x, eps_z):
+    # Doesn't make much different to add exponential tails...
+    # L = 10e-6
+    # eps_x = interp_with_exp_tail(xgrid, eps_x(xgrid), L, 50)
+    # eps_z = interp_with_exp_tail(xgrid, eps_z(xgrid), L, 50)
+    return Stack(
+        [
+            Layer.create(L - 1e-9, eps_o=eps_x, eps_e=eps_z),
+            Layer.create(np.inf, lambda _: eps_v + 0j),
+        ]
+    )
+
+
+def solve_refl(stack: Stack, om: float, theta: float):
+    return solve_stack(stack, om, theta, "s"), solve_stack(stack, om, theta, "p")
+
+
+def select_nearest_simulation_states(simul_t0, simul_tfwhm, simul_t):
+    t_0 = simul_t0
+    t_fwhm = simul_tfwhm
+    t_1 = t_0 - 2 * t_fwhm
+    t_2 = t_1 + 4 * t_fwhm
+    t_3 = 1e-12 + t_0
+    find_nearest_t = lambda ti: np.argmin(np.abs(ti - simul_t))
+    times = (
+        list(np.linspace(0, t_1, 5))
+        + list(np.linspace(t_1 + 1e-15, t_2, 25))
+        + list(np.linspace(t_2 + 10e-15, t_3, 15))
+    )
+    state_idx = list(map(find_nearest_t, times))
+    return state_idx
+
+
+def gam_const(gam):
+    return lambda x: gam * np.ones_like(x)
+
+
+def gam_wavevector_power(a, n, kz, gam):
+    def g(x):
+        v = np.maximum(1e-3 * np.ones_like(x), 1 + a * kz(x) ** 2)
+        return gam * v**n
+
+    return g
+
+
+def electron_mass_x(m, alpha, kz):
+    return lambda x: effective_mass_perp(m, alpha, kz(x))
+
+
+def electron_mass_z(m, alpha, kz):
+    return lambda x: effective_mass(m, alpha, kz(x))
+
+
+def reduced_mass_x(mc, mv, alpha, kz):
+    mx = electron_mass_x(mc, alpha, kz)
+    return lambda x: 1.0 / (1.0 / mv + 1.0 / mx(x))
+
+
+def reduced_mass_z(mc, mv, alpha, kz):
+    mz = electron_mass_z(mc, alpha, kz)
+    return lambda x: 1.0 / (1.0 / mv + 1.0 / mz(x))
+
+
+MASS_EXPRESSION = [
+    "electron_mass_x",
+    "reduced_mass_x",
+    "electron_mass_z",
+    "reduced_mass_z",
+    "constant",
+]
+
+GAM_EXPRESSION = ["constant", "powerfn"]
+
+
+def choose_mass_function(mass_expr: str, mc, mv, alpha, kz):
+    if mass_expr == "electron_mass_x":
+        return electron_mass_x(mc, alpha, kz)
+    elif mass_expr == "electron_mass_z":
+        return electron_mass_z(mc, alpha, kz)
+    elif mass_expr == "reduced_mass_x":
+        return reduced_mass_x(mc, mv, alpha, kz)
+    elif mass_expr == "reduced_mass_z":
+        return reduced_mass_z(mc, mv, alpha, kz)
+    elif mass_expr == "constant":
+        return lambda x: mc * np.ones_like(x)
+    else:
+        raise ValueError("Unknown mass_expr.")
+
+
+def choose_gam_function(gam_expr: str, gam_drude, kz):
+    if gam_expr == "constant":
+        return gam_const(gam_drude)
+    elif gam_expr.startswith("powerfn"):
+        _, a, n = gam_expr.split(" ")
+        a, n = float(a), float(n)
+        return gam_wavevector_power(a, n, kz, gam_drude)
+    else:
+        raise ValueError("Unknown gam_expr.")
+
+
+@dataclass(frozen=True)
+class OpticalModel:
+    eps_v: float
+    n_val: float
+    probe_wvl: float
+    tau_eph: float
+    alpha_eV: float
+    density_scale: float
+    gam_drude: float
+    simul_file: str
+    expr_mass_x: str
+    expr_mass_z: str
+    expr_gam_x: str
+    expr_gam_z: str
+    aoi: float = 60.0
+    mc: float = 0.5
+    mv: float = 3.0
+
+    @cached_property
+    def simulation_config(self):
+        simulfile = self.simul_file
+        metafile = simulfile.replace(".dat", ".json")
+        with open(metafile, "r") as io:
+            simulconf = SimulationConfig.from_dict(json.load(io))
+        return simulconf
+
+    @cached_property
+    def simulation_states(self):
+        simulfile = self.simul_file
+        simulconf = self.simulation_config
+        init_state = simulconf.initial_state
+        state_t, states = read_simulation_file(simulfile, init_state)
+        return state_t, states
+
+    def create_optical_model_fn(self, simulconf, state_t, states):
+        mc, mv = self.mc * SI.m_e, self.mv * SI.m_e
+        x = simulconf.grid
+        E = electric_field_to_grid(np.array([st.electric_field for st in states]))
+        kvectors = integrated_wavevector(E, state_t, self.tau_eph)
+        om = 2 * np.pi * SI.c_0 / self.probe_wvl
+        alpha = self.alpha_eV / SI.e
+        eps_i = partial(create_eps_from, self.eps_v, self.n_val, om)
+
+        def create_model(index: int):
+            state = states[index]
+            kz = interp1d(x, kvectors[:, index], kind="cubic")
+            mx = choose_mass_function(self.expr_mass_x, mc, mv, alpha, kz)
+            mz = choose_mass_function(self.expr_mass_z, mc, mv, alpha, kz)
+            gx = choose_gam_function(self.expr_gam_x, self.gam_drude, kz)
+            gz = choose_gam_function(self.expr_gam_z, self.gam_drude, kz)
+            n = interp1d(x, state.number_density[0] * self.density_scale)
+            eps_x = eps_i(n, mx, gx)
+            eps_z = eps_i(n, mz, gz)
+            return (
+                eps_x,
+                eps_z,
+                {"mx": mx, "mz": mz, "gx": gx, "gz": gz, "kz": kz},
+            )
+
+        return create_model
+
+    def create_stack_fn(self, simulconf, state_t, states):
+        get_model = self.create_optical_model_fn(simulconf, state_t, states)
+        L = simulconf.grid[-1] * 0.9999
+
+        def create_stack_from_index(index: int):
+            eps_x, eps_z, pars = get_model(index)
+            stack = create_stack(L, self.eps_v, eps_x, eps_z)
+            return stack, pars
+
+        return create_stack_from_index
+
+    def calculate_reflectivity(self):
+        om = 2 * np.pi * SI.c_0 / self.probe_wvl
+        simulconf = self.simulation_config
+        state_t, states = self.simulation_states
+        get_stack = self.create_stack_fn(simulconf, state_t, states)
+
+        def run(index: int):
+            stack, pars = get_stack(index)
+            Rs = solve_stack(stack, om, self.aoi, "s").R
+            Rp = solve_stack(stack, om, self.aoi, "p").R
+            ti = state_t[index] - simulconf.excitation_time_zero
+            return ti, Rs, Rp, (stack, pars)
+
+        idx = select_nearest_simulation_states(
+            simulconf.excitation_time_zero,
+            simulconf.excitation_time_fwhm,
+            state_t,
+        )
+        return map(run, idx)
+
+
+def run_and_append_to_file(model: OpticalModel, save_file) -> list:
+    if pathlib.Path(save_file).exists():
+        with open(save_file, "r") as io:
+            saved_data = json.load(io)
+        saved_settings = saved_data.get("settings", [])
+        saved_results = saved_data.get("results", [])
+        for settings, result in zip(saved_settings, saved_results):
+            calculator = OpticalModel(**settings)
+            if model == calculator:
+                return result
+    else:
+        saved_settings = []
+        saved_results = []
+    t, Rs, Rp, _ = unzip(model.calculate_reflectivity())
+    result = [list(t), list(Rs), list(Rp)]
+    saved_results.append(result)
+    saved_settings.append(asdict(model))
+    with open(save_file, "w") as io:
+        json.dump(
+            {
+                "settings": saved_settings,
+                "results": saved_results,
+            },
+            io,
+        )
+    return result
+
+# %%

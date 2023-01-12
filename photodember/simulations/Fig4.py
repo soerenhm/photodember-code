@@ -227,4 +227,18 @@ plt.gca().yaxis.set_major_locator(MultipleLocator(20))
 # plt.plot(np.rad2deg(th_in)[idx], np.array([ri["rp"] for ri in r])[idx])
 # plt.plot(np.rad2deg(th_in)[idx], np.array([ri["rs"] for ri in r])[idx])
 
+# -----------------------------------------------------------------------------
+# F
+# %%
+
+np.max(
+    4
+    * np.pi
+    / 3
+    * SI.eps_0
+    * SI.c_0
+    * np.trapz(np.abs(E_rad_zsum_extr) ** 2.0, t_extr)
+    * (1e-2) ** 4
+)
+
 # %%

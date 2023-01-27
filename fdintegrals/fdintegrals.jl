@@ -275,7 +275,7 @@ module FusedSilica
         bandgap_eV = 8.9
         non_parabolicity = 2.0 / e # 1/J
         relmass_cb = 0.5
-        relmass_vb = 3.0
+        relmass_vb = 10.0
         mobility_cb = 0.1 # m^2/V s
         relax_time_cb = mobility_cb * (relmass_cb * me) / e
         relax_time_vb = relax_time_cb
@@ -292,8 +292,8 @@ module FusedSilica
         T = range(1/Tmax, 1/Tmin, npoints) .|> inv |> reverse
         θ = kB * T ./ kBT0
         η = range(e*eFmin/(kB*Tmin), e*eFmax/(kB*Tmin), npoints)
-        save_scan("photodember/data/SiO2_alpha-2.0_CB.csv", params_cb, scan_fermi_integrals(params_cb, θ, η))
-        save_scan("photodember/data/SiO2_alpha-2.0_VB.csv", params_vb, scan_fermi_integrals(params_vb, θ, η))
+        # save_scan("photodember/data/SiO2_alpha-2.0_CB.csv", params_cb, scan_fermi_integrals(params_cb, θ, η))
+        save_scan("photodember/data/SiO2_alpha-2.0_VB_high-mv.csv", params_vb, scan_fermi_integrals(params_vb, θ, η))
     end
 end
 

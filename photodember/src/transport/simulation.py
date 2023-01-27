@@ -361,8 +361,9 @@ class Simulation:
         dx = self.resolution
 
         def J(E, particle: ParticleAttributes, state: ParticleState) -> ArrayF64:
-            T, eta = state.temperature, state.chemical_potential(
-                self.const.e, self.const.kB
+            T, eta = (
+                state.temperature,
+                state.red_chemical_potential,
             )
             eF = fermi_energy(
                 np.zeros(self.grid_points),

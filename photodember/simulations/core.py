@@ -582,6 +582,15 @@ def effective_mass_perp(m, alpha, kx):
     return m * (1 + 2 * alpha * q**2) ** 0.5
 
 
+def convolve_exp_decay(y, t, tau_eph: float, samples: int = 2000):
+    # Transform to uniform simulation times
+    t_conv, dt_conv = np.linspace(t[0], t[-1], samples, retstep=True)
+    conv = np.exp(-t_conv / tau_eph) * dt_conv
+    y_int = np.convolve(conv, np.interp(t_conv, t, y))[: len(t_conv)]
+    # Transform back to the (generally) non-uniform simulation times
+    return np.interp(t, t_conv, y_int)
+
+
 def integrated_wavevector(E, t, tau_eph: float, samples: int = 2000):
     # Transform to uniform simulation times
     t_conv, dt_conv = np.linspace(t[0], t[-1], samples, retstep=True)
@@ -831,5 +840,6 @@ def run_and_append_to_file(model: OpticalModel, save_file) -> list:
             io,
         )
     return result
+
 
 # %%

@@ -14,7 +14,7 @@ Interpolation = Callable[[FermiDiracTable, str], StateFunction]
 
 
 def cache_carrier_state_func(func: StateFunction):
-    """Caches the result of an expensive CarrierStateFunc call."""
+    """Caches the result of an expensive StateFunction call."""
     cache = [np.array([]) for _ in range(3)]
 
     @wraps(func)

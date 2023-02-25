@@ -11,7 +11,7 @@ from photodember.simulations.core import *
 # %%
 
 
-simulfile = r"photodember\simulations\fs1_source_term_with_T_rise_1nm_35fs_muscale-1.0_alpha-2.0.dat"
+simulfile = r"photodember/simulations/SiO2_fluence_tau-120fs_muh-scale-0.1.dat"
 metafile = simulfile.replace(".dat", ".json")
 
 with open(metafile, "r") as io:
@@ -25,14 +25,26 @@ state_t, states = read_simulation_file(simulfile, init_state)
 #%%
 
 x = conf.grid
+E_D = np.array([electric_field_to_grid(st.electric_field) for st in states])
 J = np.array(
     [
         electric_field_to_grid(sum(simul.charge_current_density(state)))
         for state in states
     ]
 )
+
+Te = np.array([st.temperature[0] for st in states])
+etae = np.array([st.red_chemical_potential[0] for st in states])
+Ne = np.array([st.number_density[0] for st in states])
+L22e = simul.particles[0].L22(Te, etae)
+Th = np.array([st.temperature[1] for st in states])
+etah = np.array([st.red_chemical_potential[1] for st in states])
+L22h = simul.particles[1].L22(Th, etah)
+L22 = L22e + L22h
+
+J_THz = np.copy(J)
 E_rad_ampl = (
-    1.0 / (4 * np.pi * SI.eps_0 * SI.c_0**2) * np.gradient(J, state_t, axis=0)
+    1.0 / (4 * np.pi * SI.eps_0 * SI.c_0**2) * np.gradient(J_THz, state_t, axis=0)
 )
 E_rad_ampl[:, 0] = 0.0  # J = 0
 E_rad_ampl[:, -1] = 0.0  # at boundaries
@@ -108,14 +120,28 @@ def total_rad_in(n, f, th, z, rad_ampl):
 
 
 # -----------------------------------------------------------------------------
+# Optical properties of the electron-hole plasma
+# %%
+
+n_THz = 2.26  # file:///C:/Users/shm92/Downloads/applsci-11-06733-v2.pdf
+om_THz = 2 * np.pi * 1.8e12
+om_p_av = np.sqrt(SI.e**2 * Ne.mean() / SI.eps_0 / (0.5 * SI.m_e))
+eps_ri = n_THz**2 - om_p_av**2 / (om_THz**2 + 1j * om_THz * 1.6e15)
+n_ri = np.sqrt(eps_ri)
+
+
+# -----------------------------------------------------------------------------
 # Calculations for Fig. 4
 # %%
 
 # Power-spectral density
 
+k = n_ri * om_THz / SI.c_0
+weight = np.exp(-np.imag(k) * x) * np.cos(np.real(k) * x)
+
 t_extr, dt_extr = np.linspace(0.0, 100e-12, 50_000, retstep=True)
 E_rad_zsum_extr_fun = extrapolate_radiation_field(
-    np.array(state_t), np.trapz(E_rad_ampl, x, axis=1), t_extr
+    np.array(state_t), np.trapz(E_rad_ampl * weight, x, axis=1), t_extr
 )
 E_rad_zsum_extr = E_rad_zsum_extr_fun(t_extr)
 E_rad_zsum_fft = rfft(E_rad_zsum_extr)
@@ -126,9 +152,8 @@ f_av = np.sum(E_rad_psd * f_rad) / np.sum(E_rad_psd)
 
 # Radiation, direction
 
-n_THz = 2.15  # file:///C:/Users/shm92/Downloads/applsci-11-06733-v2.pdf
 f_THz = f_av
-th_in = np.linspace(-np.pi / 2, np.pi / 2, 1000)
+th_in = np.linspace(-np.pi / 2, np.pi / 2, 2000)
 th_out = np.array([calc_optical_constants(n_THz, f_THz, th)["th2"] for th in th_in])
 
 Epout, Esout = unzip(
@@ -151,58 +176,42 @@ Ein = np.sqrt(np.real(Epin) ** 2 + np.real(Esin) ** 2)
 plt.figure(figsize=(4.5, 5.5))
 
 plt.subplot(2, 1, 1)
-plt.plot(t_extr * 1e15, E_rad_zsum_extr * 1e-11, "b-")
-plt.ylabel(r"Radiation, $r E / A$ (10$^{11}$ V/m$^2$)")
+plt.plot(t_extr * 1e15, E_rad_zsum_extr * 1e-9, "b-")
+plt.ylabel(r"Radiation, $r E / A$ (10$^{9}$ V/m$^2$)")
 plt.xlabel("Time, $t$ (fs)")
 plt.xlim([0, 500])
-plt.ylim([-0.05, 1.6])
 plt.gca().xaxis.set_major_locator(MultipleLocator(100))
 plt.gca().xaxis.set_minor_locator(MultipleLocator(20))
-plt.gca().yaxis.set_major_locator(MultipleLocator(0.4))
-plt.gca().yaxis.set_minor_locator(MultipleLocator(0.05))
+plt.gca().yaxis.set_major_locator(MultipleLocator(2.0))
+plt.gca().yaxis.set_minor_locator(MultipleLocator(0.4))
 
 
 plt.subplot(2, 2, 3)
 plt.plot(f_rad * 1e-12, E_rad_psd, "b-")
-plt.xlim([0, 20])
+plt.xlim([0, 40])
 plt.ylim([0, 1.05])
 plt.ylabel(f"PSD (arb. units)")
 plt.xlabel(f"Frequency, $f$ (THz)")
 plt.vlines(f_av * 1e-12, 0, 1.5, linestyle="--", color="k")
-plt.gca().xaxis.set_major_locator(MultipleLocator(5))
-plt.gca().xaxis.set_minor_locator(MultipleLocator(1))
+plt.gca().xaxis.set_major_locator(MultipleLocator(10))
+plt.gca().xaxis.set_minor_locator(MultipleLocator(2))
 plt.gca().yaxis.set_major_locator(MultipleLocator(0.2))
 plt.gca().yaxis.set_minor_locator(MultipleLocator(0.04))
 
 ax3 = plt.subplot(2, 2, 4, projection="polar")
-plt.plot(np.pi - th_in, Ein, "b-")
-plt.plot(th_out, Eout, "b-")
+plt.plot(np.pi - th_in + np.pi, Ein, "b-")
+plt.plot(th_out + np.pi, Eout, "b-")
 # plt.ylabel([])
 ax3.set_yticklabels([])
 ax3.set_xticklabels([])
 ax3.axis("off")
 
 plt.tight_layout()
-plt.savefig("Fig4.png", dpi=300, facecolor="w")
+# plt.savefig("Fig4.png", dpi=300, facecolor="w", bbox_inches="tight")
 
-
-# %%
-
-plt.figure()
-ax = plt.subplot(1, 1, 1, projection="polar")
-plt.plot(np.pi - th_in, Ein, "b-")
-plt.plot(th_out, Eout, "b-")
-ax.set_yticklabels([])
-ax.set_xticklabels([])
-ax.axis("off")
-# plt.axis("off")
-# ax.set_thetamin(-90)
-# ax.set_thetamax(90)
-
-# total_rad_in(n_THz, f_THz, np.deg2rad(30.0), x, E_rad_tsum)
 
 # -----------------------------------------------------------------------------
-# Sanity chekcs... See https://en.wikipedia.org/wiki/Total_internal_reflection
+# Sanity checks... See https://en.wikipedia.org/wiki/Total_internal_reflection
 # %%
 
 r = [calc_optical_constants(1.5, 1e15, th) for th in th_in]
@@ -228,7 +237,7 @@ plt.gca().yaxis.set_major_locator(MultipleLocator(20))
 # plt.plot(np.rad2deg(th_in)[idx], np.array([ri["rs"] for ri in r])[idx])
 
 # -----------------------------------------------------------------------------
-# F
+# THz pulse energy / cm^4
 # %%
 
 np.max(
@@ -240,5 +249,6 @@ np.max(
     * np.trapz(np.abs(E_rad_zsum_extr) ** 2.0, t_extr)
     * (1e-2) ** 4
 )
+
 
 # %%

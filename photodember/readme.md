@@ -1,6 +1,6 @@
 # Photo-Dember code
 
-Python code for simulating the photo-Dember effect in highly-excited dielectrics. To use the code
+Python code for simulating the photo-Dember effect in highly-excited dielectrics. The main code is located in the `src` folder. The `simulations` folder reproduces the simulations discussed in the manuscript.
 
 # How to use
 

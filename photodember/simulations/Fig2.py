@@ -11,7 +11,7 @@ from photodember.simulations.core import *
 # -----------------------------------------------------------------------------
 # %%
 
-simulfile = r"photodember\simulations\fs1_source_term_with_T_rise_1nm_35fs_muscale-1.0_alpha-2.0.dat"
+simulfile = r"photodember\simulations\SiO2_fluence_tau-120fs_muh-scale-0.1.dat"
 metafile = simulfile.replace(".dat", ".json")
 
 with open(metafile, "r") as io:
@@ -25,7 +25,6 @@ t, states = read_simulation_file(simulfile, init_state)
 # Prepare variables
 # -----------------------------------------------------------------------------
 # %%
-
 
 x = np.copy(simulconf.grid)
 t = np.array(t)
@@ -50,26 +49,28 @@ lines = ["-", "--", "-.", ":"]
 
 fig = plt.figure(figsize=(4.5, 5.5), dpi=125)
 plt.subplot(2, 1, 1)
-plt.plot(x_nm, electron_states[peak_density_tzero].number_density * 1e-28, "k-")
+plt.plot(x_nm, electron_states[peak_density_tzero].number_density * 1e-27, "k-")
+plt.plot(x_nm, Esim[peak_density_tzero, :] * 3e-7, "g--")
 plt.xlim([0, 1000])
-plt.ylim([0, 1.0])
-plt.xlabel(r"Coordinate, $x$ (nm)")
-plt.ylabel(r"Density, $N$ (10$^{28}$ m$^{-3}$)")
-plt.gca().yaxis.set_major_locator(MultipleLocator(0.2))
-plt.gca().yaxis.set_minor_locator(MultipleLocator(0.04))
+plt.ylim([0, 8.0])
+plt.xlabel(r"Coordinate, $z$ (nm)")
+plt.ylabel(r"Density, $N$ (10$^{27}$ m$^{-3}$)")
+plt.gca().yaxis.set_major_locator(MultipleLocator(1))
+plt.gca().yaxis.set_minor_locator(MultipleLocator(0.2))
 plt.gca().xaxis.set_major_locator(MultipleLocator(200))
 plt.gca().xaxis.set_minor_locator(MultipleLocator(40))
-plt.annotate(r"$N$", xy=(110, 0.3), fontsize="large", color="k")
-plt.annotate(r"$T_e$", xy=(50, 0.65), fontsize="large", color="b")
-plt.annotate(r"$T_h$", xy=(160, 0.48), fontsize="large", color="r")
+plt.annotate(r"$N$", xy=(300, 2.0), fontsize="large", color="k")
+plt.annotate(r"$T_e$", xy=(60, 5.4), fontsize="large", color="b")
+plt.annotate(r"$T_h$", xy=(120, 3.8), fontsize="large", color="r")
+plt.annotate(r"$E_D$", xy=(180, 1.1), fontsize="large", color="g")
 
 ax = plt.twinx()
-plt.plot(x_nm, electron_states[peak_density_tzero].temperature, "b-")
-plt.plot(x_nm, hole_states[peak_density_tzero].temperature, "r-")
-plt.ylabel(r"Temperature, $T_i$ (K)")
-ax.yaxis.set_major_locator(MultipleLocator(200))
-ax.yaxis.set_minor_locator(MultipleLocator(40))
-plt.ylim([3400, 4400])
+plt.plot(x_nm, electron_states[peak_density_tzero].temperature * 1e-4, "b-")
+plt.plot(x_nm, hole_states[peak_density_tzero].temperature * 1e-4, "r-")
+plt.ylabel(r"Temperature, $T_i$ (10$^{4}$ K)")
+ax.yaxis.set_major_locator(MultipleLocator(0.05))
+ax.yaxis.set_minor_locator(MultipleLocator(0.01))
+plt.ylim([0.95, 1.25])
 
 plt.subplot(2, 1, 2)
 t_fs = np.array(t) * 1e15
@@ -77,7 +78,7 @@ plt.plot(t_fs_offset, Esim[:, 0] * 1e-7, "g-")
 
 plt.fill_between(
     t_fs_offset,
-    0.1
+    0.12
     * np.exp(
         -4
         * np.log(2)
@@ -98,30 +99,23 @@ plt.fill_between(
 # plt.xscale("log")
 plt.xlabel(r"Time, $t$ (fs)")
 plt.ylabel(r"Electric field, $E_D$ (10$^7$ V m$^{-1}$)")
-plt.ylim([0, 0.5])
+plt.ylim([0, 0.6])
 plt.gca().yaxis.set_minor_locator(MultipleLocator(0.02))
-plt.annotate(r"$E_D$", xy=(210, 0.21), fontsize="large", color="g")
-plt.annotate(r"$T_e$", xy=(60, 0.43), fontsize="large", color="b")
-plt.annotate(r"$T_h$", xy=(100, 0.34), fontsize="large", color="r")
+plt.annotate(r"$E_D$", xy=(210, 0.15), fontsize="large", color="g")
+plt.annotate(r"$T_e$", xy=(60, 0.53), fontsize="large", color="b")
+plt.annotate(r"$T_h$", xy=(100, 0.44), fontsize="large", color="r")
 
 plt.twinx()
-Te_surf = [st.temperature[0] for st in electron_states]
-Th_surf = [st.temperature[0] for st in hole_states]
+Te_surf = [st.temperature[0] * 1e-4 for st in electron_states]
+Th_surf = [st.temperature[0] * 1e-4 for st in hole_states]
 plt.plot(t_fs_offset, Te_surf, "b-")
 plt.plot(t_fs_offset, Th_surf, "r-")
-plt.ylabel(r"Temperature, $T_i$ (K)")
+plt.ylabel(r"Temperature, $T_i$ (10$^4$ K)")
 plt.xlim([-100, 1000])
-plt.ylim([0, 5100])
+plt.ylim([0, 1.4000])
 plt.gca().xaxis.set_minor_locator(MultipleLocator(25))
-plt.gca().yaxis.set_minor_locator(MultipleLocator(200))
-plt.gca().yaxis.set_major_locator(MultipleLocator(1000))
+plt.gca().yaxis.set_minor_locator(MultipleLocator(200 * 1e-4))
+plt.gca().yaxis.set_major_locator(MultipleLocator(2000 * 1e-4))
 
 plt.tight_layout()
-# fig.savefig("Fig2.png", dpi=300, facecolor="w")
-# %%
-
-
-plt.pcolormesh(t * 1e15, x * 1e9, electric_field.T, cmap=cc.cm["fire"])
-plt.colorbar()
-plt.ylim([0, 50])
-plt.xlim([0, 1000])
+fig.savefig("Fig2.png", dpi=300, facecolor="w", bbox_inches="tight")

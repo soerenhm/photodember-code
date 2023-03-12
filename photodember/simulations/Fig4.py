@@ -123,7 +123,7 @@ def total_rad_in(n, f, th, z, rad_ampl):
 # Optical properties of the electron-hole plasma
 # %%
 
-n_THz = 2.26  # file:///C:/Users/shm92/Downloads/applsci-11-06733-v2.pdf
+n_THz = 2.26
 om_THz = 2 * np.pi * 1.8e12
 om_p_av = np.sqrt(SI.e**2 * Ne.mean() / SI.eps_0 / (0.5 * SI.m_e))
 eps_ri = n_THz**2 - om_p_av**2 / (om_THz**2 + 1j * om_THz * 1.6e15)

@@ -11,7 +11,7 @@ from photodember.simulations.core import *
 # %%
 
 
-simulfile = r"photodember/simulations/SiO2_fluence_tau-120fs_muh-scale-0.1.dat"
+simulfile = r"photodember/simulations/SiO2_fluence_tau-120fs.dat"
 metafile = simulfile.replace(".dat", ".json")
 
 with open(metafile, "r") as io:
@@ -20,6 +20,8 @@ with open(metafile, "r") as io:
 init_state = conf.initial_state
 simul, _ = conf.create_simulation()
 state_t, states = read_simulation_file(simulfile, init_state)
+states = states[:300]
+state_t = state_t[:300]
 
 
 #%%
@@ -207,7 +209,7 @@ ax3.set_xticklabels([])
 ax3.axis("off")
 
 plt.tight_layout()
-# plt.savefig("Fig4.png", dpi=300, facecolor="w", bbox_inches="tight")
+plt.savefig("Fig4a.png", dpi=300, facecolor="w", bbox_inches="tight")
 
 
 # -----------------------------------------------------------------------------

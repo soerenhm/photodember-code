@@ -81,7 +81,7 @@ def load_current_density_and_peak_density(simulfile: str):
     return J_tot, peak_density
 
 
-thz_files_dir = Path(r"photodember\simulations\thz-scan")
+thz_files_dir = Path(r"photodember\simulations\thz-scan_new-input-2")
 thz_files = list(thz_files_dir.glob("*.dat"))
 
 fluences = []
@@ -132,31 +132,91 @@ plt.tight_layout()
 # %%
 
 plt.figure(figsize=(5, 4), dpi=300)
-plt.plot(t * 1e15, np.gradient(J_tot_THz[0], t))
-plt.plot(t * 1e15, np.gradient(J_tot_THz[5], t))
+plt.plot(t * 1e15, np.gradient(J_tot_THz[3], t))
+# plt.plot(t * 1e15, np.gradient(J_tot_THz[-1], t))
 
 # %%
 
-dJdt = [
-    np.gradient(scipy.signal.medfilt(np.trapz(elem, x, axis=1), 5), t, axis=0)
-    for elem in current_densities
-]
+dJdt = []
+for i in range(len(current_densities)):
+    Ne = peak_densities[i]
+    n_THz = 2.26  # file:///C:/Users/shm92/Downloads/applsci-11-06733-v2.pdf
+    om_THz = 2 * np.pi * 1.8e12
+    om_p_av = np.sqrt(SI.e**2 * Ne.mean() / SI.eps_0 / (0.5 * SI.m_e))
+    eps_ri = n_THz**2 - om_p_av**2 / (om_THz**2 + 1j * om_THz * 1.6e15)
+    n_ri = np.sqrt(eps_ri)
+    k = n_ri * om_THz / SI.c_0
+    weight = np.exp(-np.imag(k) * x) * np.cos(np.real(k) * x)
+    # simple low pass filter... because the derivative of some simulations at intermediate fluences are a bit noisy
+    J_int = np.trapz(
+        scipy.signal.medfilt2d(current_densities[i] * weight, kernel_size=[5, 1]),
+        x,
+        axis=1,
+    )
+    # f = rfftfreq(len(J_int))
+    # J_int = rfft(J_int)
+    # # J_int[300:] = 0
+    # J_int = irfft(J_int)
+    # dJdt.append(np.gradient(J, t, axis=0))
+
+    dJdt.append(
+        np.gradient(
+            J_int,
+            t,
+            axis=0,
+        )
+    )
+    # dJdt.append(
+    #     np.gradient(
+    #         scipy.signal.medfilt(np.trapz(current_densities[i] * weight, x, axis=1), 5),
+    #         t,
+    #         axis=0,
+    #     )
+    # )
+
+# dJdt = [
+#     np.gradient(scipy.signal.medfilt(np.trapz(elem, x, axis=1), 5), t, axis=0)
+#     for elem in current_densities
+# ]
 
 E_rad = [1.0 / (4 * np.pi * SI.eps_0 * SI.c_0**2) * dJ for dJ in dJdt]
 
 psds = []
 f_av = []
+f_lo = []
+f_hi = []
 for E in E_rad:
     t_extr, dt_extr = np.linspace(0.0, 100e-12, 50_000, retstep=True)
-    E_rad_extr = extrapolate_radiation_field(np.array(t), E, t_extr)
+    E_rad_extr = extrapolate_radiation_field(np.array(t)[:400], E[:400], t_extr)
     E_fft = rfft(E_rad_extr(t_extr))
     psd = np.abs(E_fft) ** 2
     psd[0] = 0.0  # because of noise, we sometimes get a weird spike at f = 0 THz...
     f_rad = rfftfreq(len(t_extr), dt_extr)
     # f_rad_av = f_rad[np.argmax(psd)]
-    f_rad_av = np.sum(psd * f_rad) / np.sum(psd)
+    psd_dist = psd / np.sum(psd)
+    psd_cdf = np.cumsum(psd_dist)
+
+    # find quantiles
+    idxs = []
+    qs = [0.25, 0.5, 0.75]
+    curr = 0
+    i = 0
+    while len(qs) > 0:
+        q = qs.pop(0)
+        while i < len(psd_cdf):
+            if psd_cdf[i] >= q:
+                idxs.append(i)
+                break
+            i += 1
+    f_rad_lo, f_rad_med, f_rad_hi = [f_rad[i] for i in idxs]
+    f_rad_av = np.sum(psd_dist * f_rad)
     psds.append((f_rad, psd))
     f_av.append(f_rad_av)
+    f_lo.append(f_rad_lo)
+    f_hi.append(f_rad_hi)
+f_av = np.array(f_av)
+f_lo = np.array(f_lo)
+f_hi = np.array(f_hi)
 
 thz_energy = [4 * np.pi / 3 * SI.eps_0 * SI.c_0 * np.trapz(E**2, t) for E in E_rad]
 
@@ -180,14 +240,16 @@ plt.yticks(color="b")
 # plt.ylim([1e-2, 5e4])
 
 plt.twinx()
-plt.plot(
-    N,
-    [f_rad[np.argmax(psd)] * 1e-12 for (f_rad, psd) in psds],
-    # np.array(f_av) * 1e-12,
-    "sr-",
-    fillstyle="none",
-    zorder=-1,
-)
+# plt.plot(
+#     N,
+#     [f_rad[np.argmax(psd)] * 1e-12 for (f_rad, psd) in psds],
+#     # np.array(f_av) * 1e-12,
+#     "sr-",
+#     fillstyle="none",
+#     zorder=-1,
+# )
+plt.plot(N, f_av * 1e-12, "sr-", fillstyle="none")
+plt.fill_between(N, f_lo * 1e-12, f_hi * 1e-12, color="r", alpha=0.2)
 plt.ylim([5.0, 20.0])
 plt.ylabel(r"Peak frequency (THz)", color="r", zorder=-1)
 plt.yticks(color="r")
@@ -204,40 +266,42 @@ plt.savefig("FigS2.png", dpi=300, facecolor="w", bbox_inches="tight")
 # plt.subplot(2,1,2)
 
 
-# %%
+# # %%
 
-simulfile = str(thz_files[-2])
-metafile = simulfile.replace(".dat", ".json")
-with open(metafile, "r") as io:
-    conf = SimulationConfig.from_dict(json.load(io))
-init_state = conf.initial_state
-simul, _ = conf.create_simulation()
-state_t, states = read_simulation_file(simulfile, init_state)
+# simulfile = str(thz_files[-2])
+# metafile = simulfile.replace(".dat", ".json")
+# with open(metafile, "r") as io:
+#     conf = SimulationConfig.from_dict(json.load(io))
+# init_state = conf.initial_state
+# simul, _ = conf.create_simulation()
+# state_t, states = read_simulation_file(simulfile, init_state)
 
-# %%
+# # %%
 
-import scipy.signal
+# import scipy.signal
 
-# plt.plot(simul.charge_current_density(states[-1])[1])
-plt.plot(sum(simul.charge_current_density(states[1997])))
-plt.plot(sum(simul.charge_current_density(states[1998])))
-Je = np.array([np.trapz(simul.charge_current_density(st)[0], x=x) for st in states])
-Jh = np.array([np.trapz(simul.charge_current_density(st)[1], x=x) for st in states])
+# # plt.plot(simul.charge_current_density(states[-1])[1])
+# plt.plot(sum(simul.charge_current_density(states[1997])))
+# plt.plot(sum(simul.charge_current_density(states[1998])))
+# Je = np.array([np.trapz(simul.charge_current_density(st)[0], x=x) for st in states])
+# Jh = np.array([np.trapz(simul.charge_current_density(st)[1], x=x) for st in states])
 
-# %%
+# # %%
 
-i = 70
-plt.plot(t, -Je, label="electron")
-plt.plot(t, Jh, label="hole")
-plt.plot(t, np.abs(Je + Jh), label="sum")
-# plt.plot(t, -np.array(Jh), label="hole")
-plt.xlim([0e-15, 200e-15])
-plt.yscale("log")
-# plt.ylim([1e-4, 1e5])
-plt.legend(frameon=False)
-# plt.plot(x, simul.charge_current_density(states[i + 1])[0])
+# i = 70
+# plt.plot(t, -Je, label="electron")
+# plt.plot(t, Jh, label="hole")
+# plt.plot(t, np.abs(Je + Jh), label="sum")
+# # plt.plot(t, -np.array(Jh), label="hole")
+# plt.xlim([0e-15, 200e-15])
+# plt.yscale("log")
+# # plt.ylim([1e-4, 1e5])
+# plt.legend(frameon=False)
+# # plt.plot(x, simul.charge_current_density(states[i + 1])[0])
 
-# %%
+# # %%
 
-plt.plot(t, scipy.signal.medfilt(np.gradient(J1, axis=0), 5))
+# plt.plot(t, scipy.signal.medfilt(np.gradient(J1, axis=0), 5))
+# # %%
+
 # %%

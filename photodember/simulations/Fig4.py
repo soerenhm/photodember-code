@@ -1,7 +1,7 @@
 # %%
 import json
 import numpy as np
-from scipy.fft import rfft, rfftfreq
+from scipy.fft import rfft, rfftfreq, irfft
 
 from photodember.simulations.mplstyle import *
 from photodember.src.constants import SI

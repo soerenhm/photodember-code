@@ -2,6 +2,5 @@
 *__pycache__
 *.json
 *.csv
-photodember/data/*.txt
 *.dat
 *.png

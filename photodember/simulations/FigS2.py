@@ -102,21 +102,15 @@ def find_quantile_indices(cdf, qs):
     return idxs
 
 
-# %%
+def cov(x, y):
+    x = np.asarray(x)
+    y = np.asarray(y)
+    return np.mean(x * y) - np.mean(x) * np.mean(y)
 
-thz_files_dir = Path(r"photodember\simulations\thz-scan_new-input-2")
-thz_files = list(thz_files_dir.glob("*.dat"))
 
-fluences = []
-peak_densities = []
-current_densities = []
-for thz_file in thz_files:
-    filename = thz_file.name
-    fluence = float(filename.split("fluence-")[1].split("-Jm-2")[0])
-    current_density, peak_density = load_current_density_and_peak_density(str(thz_file))
-    fluences.append(fluence)
-    current_densities.append(current_density)
-    peak_densities.append(peak_density)
+def straight_line_slope(x, y):
+    return cov(x, y) / cov(x, x)
+
 
 # %%
 
@@ -154,6 +148,7 @@ for thz_file in thz_files:
     pulse_dur_scan.pulse_dur.append(pulse_dur)
     pulse_dur_scan.current_density.append(current_density)
     pulse_dur_scan.peak_density.append(peak_density)
+
 
 # %%
 
@@ -209,22 +204,21 @@ plt.sca(ax1)
 plt.plot(N, thz_energy, "bo-", fillstyle="none", ms=6)
 plt.xscale("log")
 plt.yscale("log")
-plt.xlabel(r"Excitation density (m$^{-3}$)")
-plt.ylabel(r"THz pulse energy (J/m$^4$)", color="b")
+plt.xlabel(r"Excitation density, $N$ (m$^{-3}$)")
+plt.ylabel(r"THz pulse energy, $\mathcal{E}$ (J/m$^4$)", color="b")
 plt.yticks(color="b")
-# plt.xlim([1e25, 1e28])
 plt.ylim([1e2, 5e4])
 
 plt.twinx()
 plt.plot(N, psd_stats[:, 2], "sr-", fillstyle="none")
 plt.fill_between(N, f_lo, f_hi, color="r", alpha=0.2)
 plt.ylim([5.0, 20.0])
-plt.ylabel(r"Peak frequency (THz)", color="r", zorder=-1)
+plt.ylabel(r"Peak frequency, $f$ (THz)", color="r", zorder=-1)
 plt.yticks(color="r")
 f = lambda x: np.interp(x, N, F)
 g = lambda x: np.interp(x, F, N)
 ax12 = ax1.secondary_xaxis("top", functions=(f, g))
-ax12.set_xlabel(r"Laser fluence (J m$^{-2}$)")
+ax12.set_xlabel(r"Laser fluence, $F$ (J cm$^{-2}$)")
 ax12.set_xscale("linear")
 
 # =====================================
@@ -254,16 +248,16 @@ psd_stats = (
 
 err_lo = psd_stats[:, 2] - psd_stats[:, 1]
 err_hi = psd_stats[:, 3] - psd_stats[:, 2]
-ax2.errorbar(
-    bw_pulse,
-    psd_stats[:, 0],
-    yerr=[err_lo, err_hi],
-    fmt="ro",
-    capsize=3,
-    fillstyle="none",
+slope = straight_line_slope(bw_pulse[:3], psd_stats[:3, 0])
+plt.plot(bw_pulse, psd_stats[:, 0], "ro-", fillstyle="none")
+plt.fill_between(
+    bw_pulse, psd_stats[:, 0] - err_lo, psd_stats[:, 0] + err_hi, color="r", alpha=0.2
 )
+x_ = np.linspace(0, 50, 10)
+y_ = slope * x_
+ax2.plot(x_, y_, "k--", zorder=-1)
 plt.ylim([0, 50])
-plt.xlim([0, 50])
+plt.xlim([2, 45])
 plt.ylabel(r"Peak frequency, $f$ (THz)")
 plt.xlabel(r"Excitation bandwidth, $0.44/\tau$ (THz)")
 
@@ -279,3 +273,12 @@ ax22.xaxis.set_major_locator(ticker.FixedLocator([100, 50, 30, 20, 10]))
 
 fig.tight_layout()
 fig.savefig("FigS2a", dpi=300)
+
+# %%
+
+dember_mag = np.array(
+    [
+        calculate_Erad(calculate_dJdt(x, J, N))
+        for J, N in zip(pulse_dur_scan.current_density, pulse_dur_scan.peak_density)
+    ]
+)

@@ -50,44 +50,35 @@ t_fs = (t - simulconf.excitation_time_zero) * 1e15
 t_plot = [50, 200, 2000]
 ti = [np.argmin(np.abs(t_fs - ti)) for ti in t_plot]
 
-fig, axs = plt.subplots(figsize=(12, 4), ncols=3, sharex=True)
+fig, axs = plt.subplots(figsize=(12, 4), ncols=2, sharex=True)
 
-ax1 = axs[0]
-ax2 = axs[1]
+ax2 = axs[0]
 ax22 = ax2.twinx()
-ax3 = axs[2]
+ax3 = axs[1]
 
 ls = ["-", "--", ":"]
 for i, ti_ in enumerate(ti):
-    ax2.plot(x_nm, Ne[ti_, :] * 1e-27, "k", linestyle=ls[i])
+    ax2.plot(
+        x_nm, Ne[ti_, :] * 1e-27, "k", linestyle=ls[i], label=f"t = {t_plot[i]} fs"
+    )
     ax22.plot(x_nm, SI.e * (Nh[ti_, :] - Ne[ti_, :]) * 1e-5, "b", linestyle=ls[i])
     ax3.plot(x_nm, Te[ti_, :], "r", linestyle=ls[i])
-    ax1.plot(
-        x_nm,
-        electric_field[ti_, :] * 1e-7,
-        "g",
-        linestyle=ls[i],
-        label=f"t = {t_plot[i]} fs",
-    )
 
-for ax in (ax2, ax3, ax1):
+for ax in (ax2, ax3):
     ax.set_xlim([1, 1000])
     ax.set_xscale("log")
     ax.set_xlabel(r"Depth, $z$ (nm)")
 ax2.set_ylim([0.0, 6])
-ax3.set_ylim([5000.0, 18500])
+ax3.set_ylim([5000.0, 20500])
 ax22.set_ylim([-0.2, 1.8])
-ax1.set_ylim([0, 1.0])
-ax1.legend(frameon=False)
-ax1.set_ylabel(r"Dember field, $E_D$ (10$^{7}$ V/m)")
+ax2.legend(frameon=False)
 ax2.set_ylabel(r"Electron density, $N_e$ (10$^{27}$ m$^{-3}$)")
 ax22.set_ylabel(r"Charge density, $\rho$ (10$^{5}$ C m$^{-3}$)", color="b")
 plt.sca(ax22)
 plt.xticks(color="b")
-# ax3.set_xlabel(r"Depth, $x$ (nm)")
 ax3.set_ylabel(r"Electron temperature, $T_e$ (K)")
 
 fig.tight_layout()
-fig.savefig("FigS1.png", dpi=300, facecolor="w", bbox_inches="tight")
+fig.savefig("FigS1a.png", dpi=300, facecolor="w", bbox_inches="tight")
 
 # %%
